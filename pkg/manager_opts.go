@@ -32,9 +32,11 @@ func WithKubeClient() ManagerOption {
 	}
 }
 
-func WithSimulationEnd(endTime int) ManagerOption {
+// WithEndAfter sets the duration of the simulation.
+// The manager will stop after the given number of seconds.
+func WithEndAfter(seconds int) ManagerOption {
 	return func(m *Manager) {
-		after := time.Duration(endTime) * time.Second
+		after := time.Duration(seconds) * time.Second
 		go func() {
 			<-time.After(after)
 			m.Stop()

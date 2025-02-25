@@ -1,6 +1,7 @@
 package pkg
 
 import (
+	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	"time"
 )
@@ -12,37 +13,44 @@ const (
 	Evict  EventType = "Evict"
 )
 
+type IEvent interface {
+	Handle(m *Manager)
+	At() time.Time
+	OfType() string
+}
+
 type Event struct {
-	// The time at which this event should fire in real-time
-	At time.Time
-	// Action type: Submit or Evict
-	Type EventType
-	// The pod we are dealing with
-	Pod *corev1.Pod
-	// Optional: how long the pod should stay alive before eviction
-	// Not used for Evict events directly, but used for scheduling eviction after the pod is Running
-	Duration time.Duration
+	Type     EventType
+	at       *time.Time
+	duration *time.Duration
+	PodSpec  *corev1.Pod
 }
 
-// EventQueue is a min-heap that pops the soonest event first.
-type EventQueue []*Event
-
-func (eq EventQueue) Len() int { return len(eq) }
-func (eq EventQueue) Less(i, j int) bool {
-	return eq[i].At.Before(eq[j].At)
-}
-func (eq EventQueue) Swap(i, j int) {
-	eq[i], eq[j] = eq[j], eq[i]
+func (e *Event) OfType() string {
+	return "Generic"
 }
 
-func (eq *EventQueue) Push(x interface{}) {
-	*eq = append(*eq, x.(*Event))
+func (e *Event) Handle(m *Manager) {
+	logrus.Infof("Generic event handling %s", e.Type)
 }
 
-func (eq *EventQueue) Pop() interface{} {
-	old := *eq
-	n := len(old)
-	item := old[n-1]
-	*eq = old[0 : n-1]
-	return item
+func (e *Event) At() time.Time {
+	return *e.at
+}
+
+func (e *Event) EndAt(t time.Time) time.Time {
+	return t.Add(*e.duration)
+}
+
+func NewEvent(at *time.Time, duration *time.Duration) *Event {
+	return &Event{
+		at:       at,
+		duration: duration,
+	}
+}
+
+func NewEventWithType(t EventType, at *time.Time, duration *time.Duration) *Event {
+	e := NewEvent(at, duration)
+	e.Type = t
+	return e
 }
