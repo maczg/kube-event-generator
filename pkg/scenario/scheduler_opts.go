@@ -1,4 +1,4 @@
-package pkg
+package scenario
 
 import (
 	"fmt"
@@ -10,10 +10,10 @@ import (
 	"time"
 )
 
-type ManagerOption func(*Manager)
+type SchedulerOption func(*Scheduler)
 
-func WithKubeClient() ManagerOption {
-	return func(m *Manager) {
+func WithKubeClient() SchedulerOption {
+	return func(s *Scheduler) {
 		config, err := rest.InClusterConfig()
 		if err != nil {
 			logrus.Errorf("Failed to get in-cluster config: %v", err)
@@ -28,18 +28,19 @@ func WithKubeClient() ManagerOption {
 		if err != nil {
 			logrus.Fatalf("Failed to create clientset: %v", err)
 		}
-		m.kubeClient = clientset
+		s.KubeClient = clientset
 	}
 }
 
-// WithEndAfter sets the duration of the simulation.
+// WithDeadline sets the duration of the simulation.
 // The manager will stop after the given number of seconds.
-func WithEndAfter(seconds int) ManagerOption {
-	return func(m *Manager) {
-		after := time.Duration(seconds) * time.Second
+func WithDeadline(seconds int) SchedulerOption {
+	return func(s *Scheduler) {
 		go func() {
+			<-s.startCh
+			after := time.Duration(seconds) * time.Second
 			<-time.After(after)
-			m.Stop()
+			s.Stop()
 		}()
 	}
 }

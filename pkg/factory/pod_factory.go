@@ -1,4 +1,4 @@
-package pkg
+package factory
 
 import (
 	corev1 "k8s.io/api/core/v1"
@@ -21,7 +21,7 @@ func NewPod(opts ...PodOption) *corev1.Pod {
 	return p.P
 }
 
-func WitMetadata(name, namespace string) PodOption {
+func WithMetadata(name, namespace string) PodOption {
 	return func(p *Pod) {
 		p.P.ObjectMeta.Name = name
 		p.P.ObjectMeta.Namespace = namespace
@@ -83,23 +83,19 @@ func WithLabels(labels map[string]string) PodOption {
 	}
 }
 
-func WithContainer(name, image string) PodOption {
+func WithContainer(name, image, cpu, memory string) PodOption {
 	return func(p *Pod) {
-		p.P.Spec.Containers = append(p.P.Spec.Containers, corev1.Container{
+		container := corev1.Container{
 			Name:  name,
 			Image: image,
-		})
-	}
-}
-
-func WithResource(cpu, memory string) PodOption {
-	return func(p *Pod) {
-		WithContainer("server", "nginx:latest")(p)
-		p.P.Spec.Containers[0].Resources = corev1.ResourceRequirements{
-			Requests: corev1.ResourceList{
-				corev1.ResourceCPU:    resource.MustParse(cpu),
-				corev1.ResourceMemory: resource.MustParse(memory),
+			Resources: corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse(cpu),
+					corev1.ResourceMemory: resource.MustParse(memory),
+				},
 			},
 		}
+		p.P.Spec.Containers = append(p.P.Spec.Containers, container)
+
 	}
 }

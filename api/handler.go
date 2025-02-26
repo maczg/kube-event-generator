@@ -2,17 +2,17 @@ package api
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/maczg/kube-event-generator/pkg"
+	"github.com/maczg/kube-event-generator/internal/event"
+	"github.com/maczg/kube-event-generator/pkg/factory"
 	"github.com/sirupsen/logrus"
-	"time"
 )
 
 type Handler struct {
 	R *gin.Engine
-	M *pkg.Manager
+	M *event.Manager
 }
 
-func NewHandler(m *pkg.Manager) *Handler {
+func NewHandler(m *event.Manager) *Handler {
 	r := gin.Default()
 	h := &Handler{R: r, M: m}
 	h.registerRoutes()
@@ -26,9 +26,8 @@ func (h *Handler) registerRoutes() {
 
 func (h *Handler) submit(c *gin.Context) {
 	type Request struct {
-		After    int    `json:"after"`
-		Duration *int   `json:"duration,omitempty"`
-		Type     string `json:"type"`
+		After    int  `json:"after"`
+		Duration *int `json:"duration,omitempty"`
 	}
 	var req Request
 
@@ -37,13 +36,8 @@ func (h *Handler) submit(c *gin.Context) {
 		return
 	}
 
-	at := time.Now().Add(time.Duration(req.After) * time.Second)
-	var d time.Duration
-	if req.Duration != nil {
-		d = time.Duration(*req.Duration) * time.Second
-	}
-	e := pkg.NewEvent(&at, &d)
-	h.M.EnqueueEvent(e)
+	p := factory.NewPod()
+	h.M.ScheduleAt(p, &req.After, req.Duration)
 	c.JSON(200, gin.H{"message": "event enqueued"})
 	return
 }
