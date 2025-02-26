@@ -1,0 +1,21 @@
+events:
+  - type: create
+    podSpec:
+      name: test-pod-1
+      namespace: default
+      image: nginx:latest
+      resources:
+        cpu: "1"
+        memory: "128Mi"
+    delayAfter: 5s
+    duration: 20s
+  - type: create
+    podSpec:
+      name: test-pod-2
+      namespace: default
+      image: nginx:latest
+      resources:
+        cpu: "1"
+        memory: "128Mi"
+    delayAfter: 10s
+    duration: 10s
