@@ -8,6 +8,7 @@ import (
 
 func main() {
 	scenarioFile := "scenario.yaml"
+
 	scenarioData, err := os.ReadFile(scenarioFile)
 	if err != nil {
 		logrus.Fatalf("Failed to read scenario file: %v", err)
@@ -18,7 +19,11 @@ func main() {
 	}
 	logrus.Infof("Loaded scenario with %d events", len(sc.Events))
 
-	sdl := scenario.NewScheduler(scenario.WithKubeClient(), scenario.WithDeadline(120))
+	sdl := scenario.NewScheduler(
+		scenario.WithKubeClient(),
+		scenario.WithDeadline(120),
+	)
+
 	var events []*scenario.Event
 	for _, e := range sc.Events {
 		e.GetPodFromSpec()

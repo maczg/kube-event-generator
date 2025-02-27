@@ -61,6 +61,7 @@ func (e *Event) Execute(s *Scheduler) error {
 
 func (e *Event) CreatePod(s *Scheduler) error {
 	logrus.Infof("creating pod %s", e.Pod.Name)
+
 	p, err := s.KubeClient.CoreV1().Pods(e.Pod.Namespace).Create(
 		context.TODO(),
 		e.Pod,
@@ -69,13 +70,14 @@ func (e *Event) CreatePod(s *Scheduler) error {
 	if err != nil {
 		return err
 	}
+	s.Metrics.RecordPodStart(e.Pod.Name, time.Now())
 	e.Pod = p
 	go e.waitForPodRunning(s)
 	return nil
 }
 
 func (e *Event) EvictPod(s *Scheduler) error {
-	logrus.Warnf("evict pod %s with duration %s", e.Pod.Name, e.Pod.CreationTimestamp.Time.Sub(time.Now()))
+	logrus.Warnf("evict pod %s with duration %s", e.Pod.Name, time.Now().Sub(e.Pod.CreationTimestamp.Time))
 	err := s.KubeClient.CoreV1().Pods(e.Pod.Namespace).Delete(
 		context.TODO(),
 		e.Pod.Name,
@@ -108,10 +110,12 @@ func (e *Event) waitForPodRunning(s *Scheduler) {
 			logrus.Errorf("Unexpected type in watch: %T", event.Object)
 			continue
 		}
+
 		if p.Status.Phase == corev1.PodRunning && p.DeletionTimestamp == nil {
 			if running {
 				return
 			}
+			s.Metrics.RecordPodPendingEnd(e.Pod.Name, time.Now())
 			running = true
 			logrus.Warnf("Pod %s is running at %s", p.Name, time.Now().Format("15:04:05"))
 
