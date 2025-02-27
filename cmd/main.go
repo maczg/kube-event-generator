@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/maczg/kube-event-generator/pkg/metric"
 	"github.com/maczg/kube-event-generator/pkg/scenario"
 	"github.com/sirupsen/logrus"
 	"os"
@@ -19,9 +20,16 @@ func main() {
 	}
 	logrus.Infof("Loaded scenario with %d events", len(sc.Events))
 
+	mc := metric.NewCollector(
+		metric.WithResultDir("results"),
+		metric.WithMetric("pending_queue_length"),
+		metric.WithMetric("pending_duration"),
+	)
+
 	sdl := scenario.NewScheduler(
 		scenario.WithKubeClient(),
-		scenario.WithDeadline(120),
+		scenario.WithMetricCollector(mc),
+		scenario.WithDeadline(40),
 	)
 
 	var events []*scenario.Event

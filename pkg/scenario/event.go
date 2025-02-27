@@ -70,7 +70,6 @@ func (e *Event) CreatePod(s *Scheduler) error {
 	if err != nil {
 		return err
 	}
-	s.Metrics.RecordPodStart(e.Pod.Name, time.Now())
 	e.Pod = p
 	go e.waitForPodRunning(s)
 	return nil
@@ -112,10 +111,11 @@ func (e *Event) waitForPodRunning(s *Scheduler) {
 		}
 
 		if p.Status.Phase == corev1.PodRunning && p.DeletionTimestamp == nil {
+			//TODO add pod pending duration as time.Since(p.Metadata.CreationTimestamp.Time)
 			if running {
 				return
 			}
-			s.Metrics.RecordPodPendingEnd(e.Pod.Name, time.Now())
+			//s.Metrics.RecordPodPendingEnd(e.Pod.Name, time.Now())
 			running = true
 			logrus.Warnf("Pod %s is running at %s", p.Name, time.Now().Format("15:04:05"))
 

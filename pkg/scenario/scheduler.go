@@ -4,7 +4,9 @@ import (
 	"container/heap"
 	"context"
 	"fmt"
+	"github.com/maczg/kube-event-generator/pkg/metric"
 	"github.com/sirupsen/logrus"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"sync"
@@ -22,23 +24,19 @@ type Scheduler struct {
 	mu    sync.Mutex
 	Queue *EventQueue
 	// startTime is the time when the scheduler started.
-	startTime  time.Time
-	startCh    chan struct{}
-	stopCh     chan struct{}
-	cond       *sync.Cond
-	KubeClient *kubernetes.Clientset
-	Metrics    *MetricCollector
+	startTime       time.Time
+	startCh         chan struct{}
+	stopCh          chan struct{}
+	cond            *sync.Cond
+	KubeClient      *kubernetes.Clientset
+	MetricCollector *metric.Collector
 }
 
 func NewScheduler(opts ...SchedulerOption) *Scheduler {
-
-	mc := NewMetricCollector()
-
 	s := &Scheduler{
 		Queue:   &EventQueue{},
 		startCh: make(chan struct{}),
 		stopCh:  make(chan struct{}),
-		Metrics: mc,
 	}
 	s.cond = sync.NewCond(&s.mu)
 	heap.Init(s.Queue)
@@ -63,25 +61,22 @@ func (s *Scheduler) Run() {
 
 	s.startTime = time.Now()
 	s.startCh <- struct{}{}
-
 	logrus.Infof("scheduler started")
-	go s.RecordPendingPodQueue()
+
+	go s.watchPodPendingQueue()
 
 	for {
 		select {
 		case <-s.stopCh:
 			logrus.Infof("scheduler stopped")
-			err1 := s.Metrics.PlotPendingDuration()
-			err2 := s.Metrics.PlotPendingPodsOverTime()
-			if err1 != nil || err2 != nil {
-				logrus.Errorf("Error plotting metrics: %v, %v", err1, err2)
-			}
+			// TODO refactor
+			s.MetricCollector.Dump()
 			return
 		default:
 			s.mu.Lock()
 
 			if s.Queue.Len() == 0 {
-				time.Sleep(50 * time.Millisecond)
+				time.Sleep(1 * time.Millisecond)
 				s.mu.Unlock()
 				continue
 			}
@@ -121,32 +116,45 @@ func (s *Scheduler) Enqueue(e []*Event) {
 	s.mu.Unlock()
 }
 
-func (s *Scheduler) LogPodPendingQueueLength() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	p, err := s.KubeClient.CoreV1().Pods("").List(context.TODO(), metav1.ListOptions{})
-	if err != nil {
-		logrus.Errorf("Error listing pods: %v", err)
-		return
-	}
-	pending := 0
-	for _, pod := range p.Items {
-		if pod.Status.Phase == "Pending" {
-			pending++
-		}
-	}
-	s.Metrics.RecordPendingQueueLength(pending, time.Now())
-}
-
-func (s *Scheduler) RecordPendingPodQueue() {
+func (s *Scheduler) watchPodPendingQueue() {
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-s.stopCh:
 			return
-		default:
-			s.LogPodPendingQueueLength()
-			time.Sleep(1 * time.Second)
+		case t := <-ticker.C:
+			length := s.getPendingPodQueueSize()
+			err := s.MetricCollector.AddRecord("pending_queue_length", float64(length), &t)
+			if err != nil {
+				logrus.Errorf("Error adding record: %v", err)
+			}
 		}
 	}
+}
+
+func (s *Scheduler) getPendingPodQueueSize() int {
+	p, err := s.KubeClient.CoreV1().Pods("").List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		logrus.Errorf("Error listing pods: %v", err)
+		return 0
+	}
+	pending := 0
+	for _, pod := range p.Items {
+		if pod.Status.Phase == "Pending" && s.isPodUnschedulable(&pod) {
+			pending++
+		}
+	}
+	return pending
+}
+
+func (s *Scheduler) isPodUnschedulable(p *corev1.Pod) bool {
+	if len(p.Status.Conditions) != 0 {
+		for _, condition := range p.Status.Conditions {
+			if condition.Reason == corev1.PodReasonUnschedulable {
+				return true
+			}
+		}
+	}
+	return false
 }

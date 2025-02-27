@@ -2,6 +2,7 @@ package scenario
 
 import (
 	"fmt"
+	"github.com/maczg/kube-event-generator/pkg/metric"
 	"github.com/sirupsen/logrus"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -42,5 +43,12 @@ func WithDeadline(seconds int) SchedulerOption {
 			<-time.After(after)
 			s.Stop()
 		}()
+	}
+}
+
+// WithMetrics sets the metrics collector.
+func WithMetricCollector(mc *metric.Collector) SchedulerOption {
+	return func(s *Scheduler) {
+		s.MetricCollector = mc
 	}
 }
