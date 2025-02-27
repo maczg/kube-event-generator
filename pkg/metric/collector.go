@@ -3,13 +3,12 @@ package metric
 import (
 	"fmt"
 	"github.com/sirupsen/logrus"
-	"gonum.org/v1/plot/vg"
 	"os"
 	"sync"
 	"time"
 )
 
-const ResultPath = "results/"
+const ResultDir = "results/"
 
 type Collector struct {
 	mu        sync.Mutex
@@ -20,7 +19,7 @@ type Collector struct {
 func NewCollector(opts ...CollectorOpts) *Collector {
 	c := &Collector{
 		Metrics:   make(map[string]*Metric),
-		ResultDir: ResultPath,
+		ResultDir: ResultDir,
 	}
 	for _, opt := range opts {
 		opt(c)
@@ -31,18 +30,23 @@ func NewCollector(opts ...CollectorOpts) *Collector {
 
 func (c *Collector) makeResultDir() {
 	if c.ResultDir == "" {
-		c.ResultDir = ResultPath
+		c.ResultDir = ResultDir
 	}
 	err := os.Mkdir(c.ResultDir, os.ModePerm)
 	if err != nil {
-		logrus.Errorf("could not create results directory: %v", err)
+		if !os.IsExist(err) {
+			logrus.Errorf("could not create results directory: %v", err)
+		}
 	}
 }
 
-func (c *Collector) AddMetric(name string) {
+func (c *Collector) WithMetric(m *Metric) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.Metrics[name] = NewMetric(name)
+	if _, ok := c.Metrics[m.Name]; ok {
+		logrus.Warnf("metric %s already exists", m.Name)
+	}
+	c.Metrics[m.Name] = m
 }
 
 func (c *Collector) AddRecord(name string, value float64, timestamp *time.Time) error {
@@ -56,19 +60,11 @@ func (c *Collector) AddRecord(name string, value float64, timestamp *time.Time) 
 	return nil
 }
 
-// TODO refactor me
 func (c *Collector) Dump() {
 	for _, metric := range c.Metrics {
-		metric.Dump()
-		// TODO refactor
-		if metric.Name == "pending_queue_length" {
-			plt := metric.GetLineChart("Pending Pods Over Time", "Time", "Number of Pending Pods")
-			if plt != nil {
-				err := plt.Save(10*vg.Inch, 4*vg.Inch, fmt.Sprintf("%s/pending_pods_%s.png", c.ResultDir, time.Now().Format("2006-01-02_15:04:05")))
-				if err != nil {
-					logrus.Errorf("could not save plot: %v", err)
-				}
-			}
+		err := metric.Dump(c.ResultDir)
+		if err != nil {
+			logrus.Errorf("could not dump metric %s: %v", metric.Name, err)
 		}
 	}
 }

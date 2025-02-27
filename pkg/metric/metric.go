@@ -1,10 +1,10 @@
 package metric
 
 import (
+	"encoding/csv"
 	"fmt"
-	"gonum.org/v1/plot"
-	"gonum.org/v1/plot/plotter"
-	"gonum.org/v1/plot/vg"
+	"os"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -25,13 +25,30 @@ func NewMetric(name string) *Metric {
 	}
 }
 
-func (m *Metric) Dump() {
+func (m *Metric) Dump(outputDir string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	fmt.Printf("Metric: %s\n", m.Name)
-	for _, record := range m.Values.items {
-		fmt.Printf("%v: %v\n", record.timestamp, record.value)
+	filepath := fmt.Sprintf("%s/%s_%s.csv", outputDir, m.Name, time.Now().Format("15:04:05")) + ".csv"
+	file, err := os.Create(filepath)
+	if err != nil {
+		return fmt.Errorf("could not create file: %v\n", err)
 	}
+	defer file.Close()
+	writer := csv.NewWriter(file)
+	defer writer.Flush()
+	if err = writer.Write([]string{"timestamp", "value"}); err != nil {
+		return fmt.Errorf("could not write header to file: %v\n", err)
+	}
+	for _, record := range m.Values.items {
+		line := []string{
+			record.timestamp.Format("15:04:05"),
+			strconv.FormatFloat(record.value, 'f', -1, 64),
+		}
+		if err = writer.Write(line); err != nil {
+			return err
+		}
+	}
+	return writer.Error()
 }
 
 func (m *Metric) addRecord(r Record) {
@@ -48,45 +65,4 @@ func (m *Metric) AddRecord(value float64, timestamp *time.Time) {
 		r = Record{timestamp: *timestamp, value: value}
 	}
 	m.addRecord(r)
-}
-
-func (m *Metric) GetBarChart(name, x, y string) *plot.Plot {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	pts := make(plotter.Values, len(m.Values.items))
-	for i, record := range m.Values.items {
-		pts[i] = record.value
-	}
-
-	bar, err := plotter.NewBarChart(pts, vg.Points(1))
-	if err != nil {
-		fmt.Printf("could not create bar chart: %v\n", err)
-		return nil
-	}
-
-	plt := newPlot(WithTitle(name), WithLabels(x, y))
-	plt.Add(bar)
-	return plt
-}
-
-func (m *Metric) GetLineChart(name, x, y string) *plot.Plot {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	pts := make(plotter.XYs, len(m.Values.items))
-	for i, record := range m.Values.items {
-		pts[i].X = float64(record.timestamp.Unix())
-		pts[i].Y = record.value
-	}
-
-	line, err := plotter.NewLine(pts)
-	if err != nil {
-		fmt.Printf("could not create line: %v\n", err)
-		return nil
-	}
-
-	plt := newPlot(WithTitle(name), WithLabels(x, y))
-	plt.Add(line)
-	return plt
 }

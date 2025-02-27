@@ -54,8 +54,7 @@ func (s *Scheduler) Stop() {
 
 // Run drives the entire scenario. It processes each event in chronological order.
 func (s *Scheduler) Run() {
-	_now := time.Now()
-	nextMinute := _now.Truncate(time.Minute).Add(time.Minute)
+	nextMinute := time.Now().Truncate(time.Minute).Add(time.Minute)
 	fmt.Printf("Next minute: %v\n", nextMinute)
 	time.Sleep(time.Until(nextMinute))
 
@@ -69,7 +68,6 @@ func (s *Scheduler) Run() {
 		select {
 		case <-s.stopCh:
 			logrus.Infof("scheduler stopped")
-			// TODO refactor
 			s.MetricCollector.Dump()
 			return
 		default:
@@ -125,7 +123,7 @@ func (s *Scheduler) watchPodPendingQueue() {
 			return
 		case t := <-ticker.C:
 			length := s.getPendingPodQueueSize()
-			err := s.MetricCollector.AddRecord("pending_queue_length", float64(length), &t)
+			err := s.MetricCollector.AddRecord("pod_pending_queue_length", float64(length), &t)
 			if err != nil {
 				logrus.Errorf("Error adding record: %v", err)
 			}

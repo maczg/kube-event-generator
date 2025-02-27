@@ -61,7 +61,6 @@ func (e *Event) Execute(s *Scheduler) error {
 
 func (e *Event) CreatePod(s *Scheduler) error {
 	logrus.Infof("creating pod %s", e.Pod.Name)
-
 	p, err := s.KubeClient.CoreV1().Pods(e.Pod.Namespace).Create(
 		context.TODO(),
 		e.Pod,
@@ -111,7 +110,12 @@ func (e *Event) waitForPodRunning(s *Scheduler) {
 		}
 
 		if p.Status.Phase == corev1.PodRunning && p.DeletionTimestamp == nil {
-			//TODO add pod pending duration as time.Since(p.Metadata.CreationTimestamp.Time)
+			err = s.MetricCollector.AddRecord("pod_pending_durations",
+				time.Now().Sub(p.CreationTimestamp.Time).Seconds(), nil)
+			if err != nil {
+				logrus.Errorf("Error adding record: %v", err)
+			}
+
 			if running {
 				return
 			}

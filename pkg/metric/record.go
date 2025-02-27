@@ -7,6 +7,6 @@ var less = func(a, b Record) bool {
 }
 
 type Record struct {
-	timestamp time.Time
-	value     float64
+	timestamp time.Time `csv:"timestamp"`
+	value     float64   `csv:"value"`
 }

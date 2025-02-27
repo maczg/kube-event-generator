@@ -7,8 +7,9 @@ func WithResultDir(dir string) CollectorOpts {
 		c.ResultDir = dir
 	}
 }
-func WithMetric(name string) CollectorOpts {
-	return func(c *Collector) {
-		c.AddMetric(name)
-	}
-}
+
+//func WithMetric(name string) CollectorOpts {
+//	return func(c *Collector) {
+//		c.WithMetric(name)
+//	}
+//}
