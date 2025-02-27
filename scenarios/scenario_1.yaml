@@ -1,0 +1,117 @@
+name: scenario_1
+nodes:
+  - name: node-highcpu
+    resources:
+      cpu: "8"
+      memory: "16Gi"
+      pods: "110"
+  - name: node-highmem
+    resources:
+      cpu: "4"
+      memory: "64Gi"
+      pods: "110"
+  - name: node-balanced
+    resources:
+      cpu: "4"
+      memory: "16Gi"
+      pods: "110"
+
+events:
+  - type: create
+    podSpec:
+      name: cpu-pod-1
+      namespace: default
+      image: cpu-app:latest
+      resources:
+        cpu: "4"
+        memory: "4Gi"
+    delayAfter: 0s
+    duration: 60s
+
+  - type: create
+    podSpec:
+      name: cpu-pod-2
+      namespace: default
+      image: cpu-app:latest
+      resources:
+        cpu: "4"
+        memory: "4Gi"
+    delayAfter: 5s
+    duration: 60s
+
+  - type: create
+    podSpec:
+      name: cpu-pod-3
+      namespace: default
+      image: cpu-app:latest
+      resources:
+        cpu: "4"
+        memory: "4Gi"
+    delayAfter: 10s
+    duration: 60s
+
+  - type: create
+    podSpec:
+      name: cpu-pod-4
+      namespace: default
+      image: cpu-app:latest
+      resources:
+        cpu: "4"
+        memory: "4Gi"
+    delayAfter: 15s
+    duration: 60s
+
+  - type: create
+    podSpec:
+      name: mem-pod-1
+      namespace: default
+      image: mem-app:latest
+      resources:
+        cpu: "2"
+        memory: "16Gi"
+    delayAfter: 20s
+    duration: 60s
+
+  - type: create
+    podSpec:
+      name: mem-pod-2
+      namespace: default
+      image: mem-app:latest
+      resources:
+        cpu: "2"
+        memory: "16Gi"
+    delayAfter: 25s
+    duration: 60s
+
+  - type: create
+    podSpec:
+      name: mem-pod-3
+      namespace: default
+      image: mem-app:latest
+      resources:
+        cpu: "2"
+        memory: "16Gi"
+    delayAfter: 30s
+    duration: 60s
+
+  - type: create
+    podSpec:
+      name: lat-pod-1
+      namespace: default
+      image: lat-app:latest
+      resources:
+        cpu: "1"
+        memory: "2Gi"
+    delayAfter: 35s
+    duration: 60s
+
+  - type: create
+    podSpec:
+      name: lat-pod-2
+      namespace: default
+      image: lat-app:latest
+      resources:
+        cpu: "1"
+        memory: "2Gi"
+    delayAfter: 40s
+    duration: 60s

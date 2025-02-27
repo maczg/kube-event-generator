@@ -1,1 +1,5 @@
 .idea
+results/*
+bin/*
+!results/.gitkeep
+!results/example*

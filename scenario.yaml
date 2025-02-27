@@ -1,21 +1,18 @@
+name: test-scenario
+nodes:
+  - name: node-1
+    memAllocatable: 1Gi
+    cpuAllocatable: 1
+    pod: 10
 events:
-  - type: create
-    podSpec:
-      name: test-pod-1
-      namespace: default
-      image: nginx:latest
-      resources:
-        cpu: "1"
-        memory: "128Mi"
-    delayAfter: 5s
-    duration: 20s
-  - type: create
-    podSpec:
-      name: test-pod-2
-      namespace: default
-      image: nginx:latest
-      resources:
-        cpu: "1"
-        memory: "128Mi"
-    delayAfter: 10s
+  - pod:
+      name: pod-1
+      cpu: "100m"
+      mem: "128Mi"
+    after: 5s
+    duration: 10s
+  - pod:
+      cpu: "100m"
+      mem: "128Mi"
+    after: 5s
     duration: 10s

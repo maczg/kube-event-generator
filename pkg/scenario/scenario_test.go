@@ -1,33 +1,33 @@
 package scenario
 
 import (
+	"fmt"
 	"github.com/stretchr/testify/assert"
 	"testing"
 )
 
 func TestLoadScenarioFromYAML(t *testing.T) {
 	yamlData := `
+name: test-scenario
+nodes:
+- name: node-1
+  memAllocatable: 1Gi
+  cpuAllocatable: 1
+  pod: 10
 events:
-- type: create
-  podSpec:
-  name: test-pod-1
-  namespace: default
-  image: nginx:latest
-  resources:
+ - pod:
     cpu: "100m"
-    memory: "128Mi"
-  delayAfter: 5s
-- type: evict
-  podSpec:
-  name: test-pod-2
-  namespace: default
-  image: nginx:latest
-  resources:
+    mem: "128Mi"
+   after: 5s
+   duration: 10s
+ - pod:
     cpu: "100m"
-    memory: "128Mi"
-  delayAfter: 10s
+    mem: "128Mi"
+   after: 5s
+   duration: 10s
 `
 	scenario, err := Load([]byte(yamlData))
+	fmt.Println(scenario)
 	assert.NoError(t, err, "Failed to load scenario from YAML")
 	assert.Len(t, scenario.Events, 2, "Scenario should have 2 events")
 
