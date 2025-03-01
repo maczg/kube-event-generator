@@ -66,7 +66,7 @@ func (s *Scheduler) loop() {
 		s.mu.Lock()
 		if s.queue.Len() == 0 {
 			s.mu.Unlock()
-			time.Sleep(100 * time.Microsecond)
+			//time.Sleep(100 * time.Microsecond)
 			continue
 		}
 		if s.startTime.Add(s.queue.Peek().At()).After(time.Now()) {

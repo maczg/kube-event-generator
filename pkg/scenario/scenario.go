@@ -12,7 +12,7 @@ type Scenario struct {
 	Name          string         `yaml:"name" json:"name"`
 	Deadline      time.Duration  `yaml:"deadline" json:"deadline"`
 	Nodes         []Node         `yaml:"nodes" json:"nodes"`
-	PluginConfigs map[string]int `yaml:"pluginsWeights" json:"plugin_configs"`
+	PluginConfigs map[string]int `yaml:"pluginsWeights" json:"pluginsWeights"`
 	Events        []Event        `yaml:"events" json:"events"`
 }
 
