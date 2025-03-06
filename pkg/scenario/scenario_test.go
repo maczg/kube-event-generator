@@ -27,7 +27,6 @@ cluster:
          pods: 110
 events:
   - name: pod-test
-    type: PodCreate
     from: 1s
     duration: 10s
     pod:
@@ -60,7 +59,6 @@ func TestScenario_UnmarshalYaml(t *testing.T) {
 	assert.Equal(t, "110", s.Cluster.Nodes[0].Status.Capacity.Pods().String())
 	assert.Equal(t, "110", s.Cluster.Nodes[0].Status.Allocatable.Pods().String())
 	assert.Equal(t, "pod-test", s.Events[0].Name)
-	assert.Equal(t, "PodCreate", s.Events[0].Type)
 	assert.Equal(t, 1*time.Second, s.Events[0].From)
 	assert.Equal(t, 10*time.Second, s.Events[0].Duration)
 	assert.Equal(t, "test-pod", s.Events[0].Pod.Name)
