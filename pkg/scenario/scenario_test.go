@@ -4,6 +4,7 @@ import (
 	"github.com/ghodss/yaml"
 	"github.com/stretchr/testify/assert"
 	"testing"
+	"time"
 )
 
 var testScenarioBytes = []byte(`
@@ -27,7 +28,7 @@ cluster:
 events:
   - name: pod-test
     type: PodCreate
-    after: 1s
+    from: 1s
     duration: 10s
     pod:
      metadata:
@@ -60,8 +61,8 @@ func TestScenario_UnmarshalYaml(t *testing.T) {
 	assert.Equal(t, "110", s.Cluster.Nodes[0].Status.Allocatable.Pods().String())
 	assert.Equal(t, "pod-test", s.Events[0].Name)
 	assert.Equal(t, "PodCreate", s.Events[0].Type)
-	assert.Equal(t, "1s", s.Events[0].From)
-	assert.Equal(t, "10s", s.Events[0].Duration)
+	assert.Equal(t, 1*time.Second, s.Events[0].From)
+	assert.Equal(t, 10*time.Second, s.Events[0].Duration)
 	assert.Equal(t, "test-pod", s.Events[0].Pod.Name)
 	assert.Equal(t, "default", s.Events[0].Pod.Namespace)
 	assert.Equal(t, "nginx", s.Events[0].Pod.Spec.Containers[0].Name)
