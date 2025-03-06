@@ -28,34 +28,34 @@ type Scheduler interface {
 	Start() error
 	// Stop stops scheduling events
 	Stop() error
-	// Schedule an Event on the scheduler queue
-	Schedule(e Event)
+	// Schedule an Schedulable on the scheduler queue
+	Schedule(e Schedulable)
 	// StartedAt returns the time when the scheduler started
 	StartedAt() time.Time
 }
 
 type scheduler struct {
 	mu        sync.Mutex
-	events    container.Heap[Event]
+	events    container.Heap[Schedulable]
 	startTime time.Time
 
 	cancelCtx context.Context
 	cancelFn  context.CancelFunc
 	running   bool
 	stopCh    chan struct{}
-	// eventCh is used to receive Event popped from the heap
-	eventCh chan Event
+	// eventCh is used to receive Schedulable popped from the heap
+	eventCh chan Schedulable
 }
 
 func New() Scheduler {
 	ctx, cancel := context.WithCancel(context.Background())
 	s := scheduler{
-		events:    *container.NewHeap[Event](EventLessFn),
+		events:    *container.NewHeap[Schedulable](SchedulableCmpFn),
 		cancelCtx: ctx,
 		cancelFn:  cancel,
 		running:   false,
 		stopCh:    make(chan struct{}),
-		eventCh:   make(chan Event),
+		eventCh:   make(chan Schedulable),
 	}
 	return &s
 }
@@ -113,21 +113,21 @@ func (s *scheduler) run() {
 				s.mu.Unlock()
 				continue
 			}
-			e := heap.Pop(&s.events).(Event)
+			e := heap.Pop(&s.events).(Schedulable)
 			s.mu.Unlock()
 			s.eventCh <- e
 		}
 	}
 }
 
-func (s *scheduler) processEvent(e Event) {
+func (s *scheduler) processEvent(e Schedulable) {
 	err := e.Run(s.cancelCtx)
 	if err != nil {
 		logrus.Errorf("[scheduler] event [%s] return error: %v", e.ID(), err)
 	}
 }
 
-func (s *scheduler) Schedule(e Event) {
+func (s *scheduler) Schedule(e Schedulable) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.events.Add(e)

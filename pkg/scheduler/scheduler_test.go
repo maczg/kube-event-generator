@@ -54,7 +54,7 @@ func (te *testEvent) After() time.Duration {
 	return te.delay
 }
 
-func (te *testEvent) Duration() time.Duration {
+func (te *testEvent) For() time.Duration {
 	return 0
 }
 
