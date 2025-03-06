@@ -4,12 +4,12 @@ import (
 	"github.com/ghodss/yaml"
 	"github.com/stretchr/testify/assert"
 	"testing"
+	"time"
 )
 
 var testEventBytes = []byte(`
 name: pod-test
-type: PodCreate
-after: 1s
+from: 1s
 duration: 10s
 pod:
   metadata:
@@ -20,8 +20,8 @@ pod:
     - name: nginx
       resources:
         requests:
-         cpu: 100m
-         memory: 128Mi
+         cpu: "100m"
+         memory: "128Mi"
 `)
 
 func TestEvent_UnmarshalYaml(t *testing.T) {
@@ -31,9 +31,8 @@ func TestEvent_UnmarshalYaml(t *testing.T) {
 		t.Fatalf("error  %s with type %T\n", err, err)
 	}
 	assert.Equal(t, "pod-test", event.Name)
-	assert.Equal(t, "PodCreate", event.Type)
-	assert.Equal(t, "1s", event.From)
-	assert.Equal(t, "10s", event.Duration)
+	assert.Equal(t, 1*time.Second, event.From)
+	assert.Equal(t, 10*time.Second, event.Duration)
 	assert.Equal(t, "test-pod", event.Pod.Name)
 	assert.Equal(t, "default", event.Pod.Namespace)
 	assert.Equal(t, "nginx", event.Pod.Spec.Containers[0].Name)
