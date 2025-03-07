@@ -2,26 +2,35 @@ package cmd
 
 import (
 	"fmt"
+	"github.com/maczg/kube-event-generator/cmd/cluster"
 	"github.com/maczg/kube-event-generator/cmd/simulation"
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"os"
-	"time"
+	"runtime"
+	"strings"
 )
 
-var defaultSimulationName = func() string {
-	name := fmt.Sprintf("sim-%s", time.Now().Format("15:04:05"))
-	return name
-}
+var verbose bool
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Use:     "kube-event-generator",
-	Aliases: []string{"keg"},
-	Short:   "A tool to generate Kubernetes events for testing purposes",
-	Long:    `kube-event-generator is a tool to generate Kubernetes events for testing purposes.`,
-	// Uncomment the following line if your bare application
-	// has an action associated with it:
-	// Run: func(cmd *cobra.Command, args []string) { },
+	Use:   "keg",
+	Short: "A tool to generate Kubernetes events for testing purposes",
+	Long:  `kube-event-generator is a tool to generate Kubernetes events for testing purposes.`,
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		logrus.SetFormatter(&logrus.TextFormatter{
+			FullTimestamp:   true,
+			TimestampFormat: "2006-01-02 15:04:05.000",
+			CallerPrettyfier: func(f *runtime.Frame) (string, string) {
+				return "", fmt.Sprintf("%s:%d", strings.Split(f.File, "/")[len(strings.Split(f.File, "/"))-1], f.Line)
+			},
+		})
+		logrus.SetReportCaller(true)
+		if verbose {
+			logrus.SetLevel(logrus.DebugLevel)
+		}
+	},
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -34,6 +43,7 @@ func Execute() {
 }
 
 func init() {
-	rootCmd.AddCommand(simulation.SimulationCmd)
-	rootCmd.PersistentFlags().StringP("name", "n", defaultSimulationName(), "Name of the simulation")
+	rootCmd.AddCommand(cluster.Cmd)
+	rootCmd.AddCommand(simulation.Cmd)
+	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose logging")
 }

@@ -2,10 +2,11 @@ package simulation
 
 import (
 	"github.com/maczg/kube-event-generator/cmd/simulation/generate"
+	"github.com/maczg/kube-event-generator/cmd/simulation/run"
 	"github.com/spf13/cobra"
 )
 
-var SimulationCmd = &cobra.Command{
+var Cmd = &cobra.Command{
 	Use:     "simulation",
 	Aliases: []string{"sim"},
 	Short:   "Simulation commands",
@@ -13,5 +14,6 @@ var SimulationCmd = &cobra.Command{
 }
 
 func init() {
-	SimulationCmd.AddCommand(generate.Cmd)
+	Cmd.AddCommand(generate.Cmd)
+	Cmd.AddCommand(run.Cmd)
 }

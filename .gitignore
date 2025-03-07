@@ -1,5 +1,8 @@
 .idea
+trash/*
 results/*
 bin/*
+scenarios/*
+!scenarios/.gitkeep
 !results/.gitkeep
 !results/example*

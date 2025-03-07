@@ -1,9 +1,9 @@
-package container
+package scheduler
 
 import "testing"
 
 func TestHeapInt(t *testing.T) {
-	h := NewHeap[int](func(a, b int) bool {
+	h := NewQueue[int](func(a, b int) bool {
 		return a < b
 	})
 	inputs := []int{5, 3, 8, 1, 2}
@@ -25,7 +25,7 @@ func TestHeapInt(t *testing.T) {
 }
 
 func TestHeapString(t *testing.T) {
-	h := NewHeap[string](func(a, b string) bool {
+	h := NewQueue[string](func(a, b string) bool {
 		return a < b
 	})
 	inputs := []string{"banana", "apple", "cherry", "date"}

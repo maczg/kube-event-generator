@@ -48,7 +48,7 @@ func TestScenario_UnmarshalYaml(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error  %s with type %T\n", err, err)
 	}
-	assert.Equal(t, "Scenario 1", s.Name)
+	assert.Equal(t, "Scenario 1", s.Metadata.Name)
 	assert.Equal(t, 2, len(s.Cluster.SchedulerWeights))
 	assert.Equal(t, 1, s.Cluster.SchedulerWeights["plugin-1"])
 	assert.Equal(t, 2, s.Cluster.SchedulerWeights["plugin-2"])

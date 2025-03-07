@@ -3,11 +3,14 @@ package scenario
 import (
 	"encoding/json"
 	"github.com/ghodss/yaml"
+	"github.com/google/uuid"
 	v1 "k8s.io/api/core/v1"
 	"time"
 )
 
 type Event struct {
+	// Unique identifier of the event
+	UID string `yaml:"id" json:"id"`
 	// Name of the event
 	Name string `yaml:"name" json:"name"`
 	// From when the event should be applied
@@ -21,6 +24,7 @@ type Event struct {
 
 func NewEvent(name string, from, duration time.Duration, pod v1.Pod) *Event {
 	return &Event{
+		UID:      uuid.New().String(),
 		Name:     name,
 		From:     from,
 		Duration: duration,
@@ -59,12 +63,14 @@ func (e *Event) UnmarshalJSON(data []byte) error {
 
 func (e *Event) MarshalJSON() ([]byte, error) {
 	type alias struct {
+		Uid      string `yaml:"id" json:"id"`
 		Name     string `yaml:"name" json:"name"`
 		From     string `yaml:"from" json:"from"`
 		Duration string `yaml:"duration" json:"duration"`
 		Pod      v1.Pod `yaml:"pod" json:"pod"`
 	}
 	a := alias{
+		Uid:      e.UID,
 		Name:     e.Name,
 		From:     e.From.Round(time.Second).String(),
 		Duration: e.Duration.Round(time.Second).String(),

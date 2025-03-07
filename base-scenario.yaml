@@ -1,0 +1,57 @@
+cluster:
+  nodes:
+    - metadata:
+        name: node-0
+      status:
+        allocatable:
+          cpu: "4"
+          memory: 16Gi
+          pods: "110"
+        capacity:
+          cpu: "4"
+          memory: 16Gi
+          pods: "110"
+    - metadata:
+        name: node-1
+      status:
+        allocatable:
+          cpu: "4"
+          memory: 16Gi
+          pods: "110"
+        capacity:
+          cpu: "4"
+          memory: 16Gi
+          pods: "110"
+    - metadata:
+        name: node-2
+      status:
+        allocatable:
+          cpu: "4"
+          memory: 16Gi
+          pods: "110"
+        capacity:
+          cpu: "4"
+          memory: 16Gi
+          pods: "110"
+    - metadata:
+        name: node-3
+      status:
+        allocatable:
+          cpu: "4"
+          memory: 16Gi
+          pods: "110"
+        capacity:
+          cpu: "4"
+          memory: 16Gi
+          pods: "110"
+    - metadata:
+        name: node-4
+      status:
+        allocatable:
+          cpu: "4"
+          memory: 16Gi
+          pods: "110"
+        capacity:
+          cpu: "4"
+          memory: 16Gi
+          pods: "110"
