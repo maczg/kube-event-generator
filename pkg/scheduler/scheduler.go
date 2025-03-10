@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"github.com/maczg/kube-event-generator/pkg/container"
+	"github.com/maczg/kube-event-generator/pkg/logger"
 	"github.com/sirupsen/logrus"
 	"sync"
 	"time"
@@ -38,6 +39,7 @@ type scheduler struct {
 	mu        sync.Mutex
 	events    container.Heap[Schedulable]
 	startTime time.Time
+	logger    logger.Logger
 
 	cancelCtx context.Context
 	cancelFn  context.CancelFunc
@@ -51,6 +53,7 @@ func New() Scheduler {
 	ctx, cancel := context.WithCancel(context.Background())
 	s := scheduler{
 		events:    *container.NewHeap[Schedulable](SchedulableCmpFn),
+		logger:    logger.NewLogger(logger.LevelDebug, "scheduler"),
 		cancelCtx: ctx,
 		cancelFn:  cancel,
 		running:   false,
@@ -70,8 +73,7 @@ func (s *scheduler) Start() error {
 	s.mu.Unlock()
 
 	s.startTime = time.Now()
-
-	logrus.Infoln("[scheduler] started")
+	s.logger.Info("starting scheduler process")
 
 	go s.run()
 
@@ -101,7 +103,7 @@ func (s *scheduler) run() {
 	for {
 		select {
 		case <-s.cancelCtx.Done():
-			logrus.Infoln("[scheduler] ctx Done, stopping")
+			s.logger.Info("ctx Done, stopping")
 			return
 		default:
 			s.mu.Lock()
@@ -123,8 +125,9 @@ func (s *scheduler) run() {
 func (s *scheduler) processEvent(e Schedulable) {
 	err := e.Run(s.cancelCtx)
 	if err != nil {
-		logrus.Errorf("[scheduler] event [%s] return error: %v", e.ID(), err)
+		s.logger.Error("event [%s] return error: %v", e.ID(), err)
 	}
+	s.logger.Debug("event [%s] finished", e.ID())
 }
 
 func (s *scheduler) Schedule(e Schedulable) {
