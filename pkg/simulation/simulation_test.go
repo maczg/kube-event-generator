@@ -23,12 +23,12 @@ cluster:
          memory: 8Gi
          pods: 110
 events:
-  - name: pod-test
-    from: 5s
-    duration: 20s
+  - name: pod-1
+    from: 1s
+    duration: 10s
     pod:
      metadata:
-       name: test-pod
+       name: pod-1
        namespace: default
      spec:
        containers:
@@ -36,8 +36,23 @@ events:
          image: nginx
          resources:
           requests:
-            cpu: 100m
+            cpu: 1
             memory: 128Mi
+  - name: pod-2
+    from: 5s
+    duration: 11s
+    pod:
+     metadata:
+       name: pod-2
+       namespace: default 
+     spec:
+       containers:
+       - name: nginx
+         image: nginx
+         resources:
+           requests:
+             cpu: 1
+             memory: 128Mi
 `)
 
 func Test_RunStart(t *testing.T) {
@@ -50,8 +65,8 @@ func Test_RunStart(t *testing.T) {
 	mgr := utils.NewKubernetesManager(client)
 
 	sim := New(scn, mgr)
-
 	err = sim.Start()
+
 	assert.Nil(t, err)
 
 }

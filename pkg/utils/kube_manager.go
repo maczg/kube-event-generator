@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"context"
 	"fmt"
 	"github.com/sirupsen/logrus"
 	"k8s.io/client-go/kubernetes"
@@ -40,4 +41,34 @@ func MakeClientSet() (*kubernetes.Clientset, error) {
 		return nil, fmt.Errorf("failed to create clientset: %v", err)
 	}
 	return clientset, nil
+}
+
+func (m *KubernetesManager) ResetNodes() error {
+	nodes, err := m.nodeFactory.GetNodes(context.Background(), *m.clientset)
+	if err != nil {
+		return fmt.Errorf("failed to get nodes: %v", err)
+	}
+	items := nodes.Items
+	for _, n := range items {
+		err = m.nodeFactory.DeleteNode(context.Background(), *m.clientset, n.Name)
+		if err != nil {
+			logrus.Errorf("failed to delete node %s: %v", n.Name, err)
+		}
+	}
+	return nil
+}
+
+func (m *KubernetesManager) ResetPods() error {
+	pods, err := m.podFactory.ListPods(context.Background(), *m.clientset, "")
+	if err != nil {
+		return fmt.Errorf("failed to get pods: %v", err)
+	}
+	items := pods.Items
+	for _, p := range items {
+		err = m.podFactory.DeletePod(context.Background(), *m.clientset, &p)
+		if err != nil {
+			logrus.Errorf("failed to delete pod %s: %v", p.Name, err)
+		}
+	}
+	return nil
 }
