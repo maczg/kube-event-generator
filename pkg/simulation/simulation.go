@@ -60,10 +60,11 @@ func (s *Simulation) initializeEvents() {
 	}
 }
 
-func (s *Simulation) initNodeResourceMetricCapacity() {
+func (s *Simulation) initMetricValues() {
 	for _, n := range s.Scenario.Cluster.Nodes {
 		NodeResourceMetric.Set(n.Status.Capacity.Cpu().AsApproximateFloat64(), metric.WithLabels(n.Name, "cpu"))
 		NodeResourceMetric.Set(n.Status.Capacity.Memory().AsApproximateFloat64(), metric.WithLabels(n.Name, "memory"))
+		pendingPodQueueMetric.Add(0, metric.WithLabels("pending"))
 	}
 
 }
@@ -82,7 +83,7 @@ func (s *Simulation) Start() error {
 		return err
 	}
 
-	s.initNodeResourceMetricCapacity()
+	s.initMetricValues()
 	s.logger.Info("starting simulation %s", s.ID)
 
 	go s.startScheduler()
@@ -97,13 +98,7 @@ func (s *Simulation) waitToFinish() error {
 		select {
 		case <-s.stopCtx.Done():
 
-			if err := NodeResourceMetric.ExportCSV(s.ID); err != nil {
-				s.logger.Error("error exporting csv: %v", err)
-			}
-
-			if err := eventTimelineMetric.ExportCSV(s.ID); err != nil {
-				s.logger.Error("error exporting csv: %v", err)
-			}
+			s.exportMetrics()
 
 			err := s.stopCtx.Err()
 			s.logger.Info("simulation %s stopping. Cause: %s ", s.ID, s.stopCtx.Err())
@@ -124,6 +119,12 @@ func (s *Simulation) exportMetrics() {
 		s.logger.Error("error exporting csv: %v", err)
 	}
 	if err := eventTimelineMetric.ExportCSV(s.ID); err != nil {
+		s.logger.Error("error exporting csv: %v", err)
+	}
+	if err := podPendingDurationMetric.ExportCSV(s.ID); err != nil {
+		s.logger.Error("error exporting csv: %v", err)
+	}
+	if err := pendingPodQueueMetric.ExportCSV(s.ID); err != nil {
 		s.logger.Error("error exporting csv: %v", err)
 	}
 }
@@ -173,71 +174,6 @@ func (s *Simulation) watchState() {
 			s.handlePodEvent(e, runningPod)
 		}
 	}
-
-	//for {
-	//	select {
-	//	case <-s.stopCtx.Done():
-	//		s.logger.Info("watcher %s stopping", s.ID)
-	//		return
-	//	case e := <-w.ResultChan():
-	//		p, ok := e.Object.(*corev1.Pod)
-	//		if !ok {
-	//			continue
-	//		}
-	//
-	//		switch {
-	//		case e.Type == "ADDED":
-	//			s.logger.Info("pod %s %s - status %s", p.Name, e.Type, p.Status.Phase)
-	//			eventTimelineMetric.Set(1, metric.WithLabels(p.Name, "added"))
-	//
-	//		case e.Type == watch.Modified:
-	//			// pending
-	//			if p.Status.Phase == corev1.PodPending {
-	//				s.logger.Info("pod %s %s - status %s", p.Name, e.Type, p.Status.Phase)
-	//				eventTimelineMetric.Set(1, metric.WithLabels(p.Name, "pending"))
-	//			}
-	//			if p.Status.Phase == corev1.PodRunning && p.ObjectMeta.DeletionTimestamp == nil {
-	//				if _, exists := runningPod[p.Name]; !exists {
-	//					// first transition to running state
-	//					s.logger.Info("pod %s %s - status %s", p.Name, e.Type, p.Status.Phase)
-	//					runningPod[p.Name] = true
-	//					// here we know where the pod is running (node name) and we can measure the node status
-	//					nodeName := p.Spec.NodeName
-	//					s.mu.Lock()
-	//					cpu := p.Spec.Containers[0].Resources.Requests.Cpu().AsApproximateFloat64()
-	//					mem := p.Spec.Containers[0].Resources.Requests.Memory().AsApproximateFloat64()
-	//
-	//					NodeResourceMetric.Sub(cpu, metric.WithLabels(nodeName, "cpu"))
-	//					NodeResourceMetric.Sub(mem, metric.WithLabels(nodeName, "memory"))
-	//					eventTimelineMetric.Set(1, metric.WithLabels(p.Name, "running"))
-	//					s.mu.Unlock()
-	//				}
-	//			}
-	//		case e.Type == watch.Deleted:
-	//			// pod is deleted
-	//			s.logger.Info("pod %s %s - status %s, was in node %s", p.Name, e.Type, p.Status.Phase, p.Spec.NodeName)
-	//			s.mu.Lock()
-	//
-	//			nodeName := p.Spec.NodeName
-	//			cpu := p.Spec.Containers[0].Resources.Requests.Cpu().AsApproximateFloat64()
-	//			mem := p.Spec.Containers[0].Resources.Requests.Memory().AsApproximateFloat64()
-	//
-	//			NodeResourceMetric.Add(cpu, metric.WithLabels(nodeName, "cpu"))
-	//			NodeResourceMetric.Add(mem, metric.WithLabels(nodeName, "memory"))
-	//			eventTimelineMetric.Set(1, metric.WithLabels(p.Name, "deleted"))
-	//
-	//			for i, pod := range s.podMap {
-	//				if pod == p.Name {
-	//					s.logger.Info("pod %s is done", p.Name)
-	//					s.podMap = append(s.podMap[:i], s.podMap[i+1:]...)
-	//					break
-	//				}
-	//			}
-	//			s.logger.Info("queue len %d", len(s.podMap))
-	//			s.mu.Unlock()
-	//		}
-	//	}
-	//}
 }
 
 func (s *Simulation) resetCluster() error {

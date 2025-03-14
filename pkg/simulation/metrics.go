@@ -21,7 +21,23 @@ var eventTimelineMetric = metric.NewInMemoryGaugeVec(
 	},
 	[]string{"pod", "status"})
 
+var podPendingDurationMetric = metric.NewInMemoryGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "pod_pending_duration",
+		Help: "Pod pending duration",
+	},
+	[]string{"pod"})
+
+var pendingPodQueueMetric = metric.NewInMemoryGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "pending_pods",
+		Help: "Number of pending pods",
+	},
+	[]string{"status"})
+
 func init() {
 	reg.MustRegister(NodeResourceMetric)
 	reg.MustRegister(eventTimelineMetric)
+	reg.MustRegister(podPendingDurationMetric)
+	reg.MustRegister(pendingPodQueueMetric)
 }

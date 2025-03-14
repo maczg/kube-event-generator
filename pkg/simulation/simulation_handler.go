@@ -4,6 +4,7 @@ import (
 	"github.com/maczg/kube-event-generator/pkg/metric"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/watch"
+	"time"
 )
 
 func (s *Simulation) handlePodEvent(e watch.Event, runningPod map[string]bool) {
@@ -23,10 +24,17 @@ func (s *Simulation) handlePodEvent(e watch.Event, runningPod map[string]bool) {
 	}
 }
 
+// Add a map to track pending pods
+var pendingPods = make(map[string]bool)
+
 func (s *Simulation) handlePodModified(p *corev1.Pod, runningPod map[string]bool) {
 	if p.Status.Phase == corev1.PodPending {
 		s.logger.Info("pod %s %s - status %s", p.Name, watch.Modified, p.Status.Phase)
 		eventTimelineMetric.Set(1, metric.WithLabels(p.Name, "pending"))
+		if !pendingPods[p.Name] {
+			pendingPodQueueMetric.Add(1, metric.WithLabels("pending")) // Increment the gauge when a pod is pending
+			pendingPods[p.Name] = true
+		}
 	}
 	if p.Status.Phase == corev1.PodRunning && p.ObjectMeta.DeletionTimestamp == nil {
 		if _, exists := runningPod[p.Name]; !exists {
@@ -34,6 +42,13 @@ func (s *Simulation) handlePodModified(p *corev1.Pod, runningPod map[string]bool
 			runningPod[p.Name] = true
 			s.updateNodeResourceMetrics(p, -1)
 			eventTimelineMetric.Set(1, metric.WithLabels(p.Name, "running"))
+			// Calculate the duration from creation to running
+			duration := time.Since(p.CreationTimestamp.Time).Seconds()
+			podPendingDurationMetric.Set(duration, metric.WithLabels(p.Name))
+			if pendingPods[p.Name] {
+				pendingPodQueueMetric.Sub(1, metric.WithLabels("pending")) // Decrement the gauge when a pod starts running
+				delete(pendingPods, p.Name)                                // Remove the pod from the pending map
+			}
 		}
 	}
 }
@@ -44,6 +59,11 @@ func (s *Simulation) handlePodDeleted(p *corev1.Pod) {
 	s.removePodFromMap(p.Name)
 }
 
+// updateNodeResourceMetrics updates the node resource metrics with the given factor
+//
+//	= -1 means that the pod is running, and we need to subtract the resources from the node
+//
+// factor = 1 means that the pod is done, and we need to add the resources back to the node
 func (s *Simulation) updateNodeResourceMetrics(p *corev1.Pod, factor float64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
