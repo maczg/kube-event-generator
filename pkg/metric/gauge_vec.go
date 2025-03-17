@@ -105,11 +105,26 @@ func (g *InMemoryGaugeVec) Describe(ch chan<- *prometheus.Desc) {
 	g.gaugeVec.Describe(ch)
 }
 
-func (g *InMemoryGaugeVec) ExportCSV(base string) error {
+func (g *InMemoryGaugeVec) ExportCSV(dir string, baseFileName string) error {
+
+	baseFileName = fmt.Sprintf("%s-%s.csv", baseFileName, g.metricName)
+
+	if dir != "" {
+		err := os.MkdirAll(dir, 0755)
+		if err != nil {
+			return err
+		}
+	} else {
+		dir = "."
+	}
+
+	fullPath := fmt.Sprintf("%s/%s", dir, baseFileName)
+
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
-	file, err := os.Create(fmt.Sprintf("%s-%s.csv", base, g.metricName))
+	file, err := os.Create(fullPath)
+
 	if err != nil {
 		return err
 	}
@@ -155,28 +170,22 @@ func (g *InMemoryGaugeVec) ExportCSV(base string) error {
 			return err
 		}
 	}
-
-	//header := []string{"timestamp", "labels", "value"}
-	//if err = writer.Write(header); err != nil {
-	//	return err
-	//}
-	//
-	//// Write records
-	//for _, record := range g.records {
-	//	labels, err := json.Marshal(record.labels)
-	//	if err != nil {
-	//		return err
-	//	}
-	//	row := []string{
-	//		record.timestamp.Format(time.RFC3339),
-	//		string(labels),
-	//		fmt.Sprintf("%f", record.value),
-	//	}
-	//	if err := writer.Write(row); err != nil {
-	//		return err
-	//	}
-	//}
-
 	return nil
+}
 
+type GaugeInfo struct {
+	Name       string
+	Labels     Labels
+	NumRecords int
+}
+
+func (g *InMemoryGaugeVec) Info() GaugeInfo {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	return GaugeInfo{
+		Name:       g.metricName,
+		Labels:     g.labels,
+		NumRecords: len(g.records),
+	}
 }

@@ -12,6 +12,10 @@ import (
 
 func TestExportCSV(t *testing.T) {
 	labels := Labels{"node", "resource"}
+	dir := "results"
+	fileName := fmt.Sprintf("test_node_resource_usage-%s", time.Now().Format("15-04-05"))
+	fullPath := fmt.Sprintf("%s/%s-node_resource_usage.csv", dir, fileName)
+
 	gaugeVec := NewInMemoryGaugeVec(prometheus.GaugeOpts{
 		Name: "node_resource_usage",
 		Help: "Node resource usage (with local history)",
@@ -22,11 +26,11 @@ func TestExportCSV(t *testing.T) {
 	gaugeVec.Set(20.0, Labels{"node2", "memory"})
 	gaugeVec.Set(15.0, Labels{"node1", "memory"})
 
-	fileName := fmt.Sprintf("test_node_resource_usage-%s", time.Now().Format("15-04-05"))
-	err := gaugeVec.ExportCSV(fileName)
+	err := gaugeVec.ExportCSV(dir, fileName)
+
 	assert.NoError(t, err)
 
-	file, err := os.Open(fileName + "-node_resource_usage.csv")
+	file, err := os.Open(fullPath)
 	assert.NoError(t, err)
 	defer file.Close()
 

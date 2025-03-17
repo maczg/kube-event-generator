@@ -15,7 +15,10 @@ import (
 	"time"
 )
 
-const simulatorName = "simulator"
+const (
+	simulatorName    = "simulator"
+	defaultResultDir = "results"
+)
 
 type Simulation struct {
 	ID        string
@@ -25,9 +28,36 @@ type Simulation struct {
 	kubeMgr   *utils.KubernetesManager
 	errCh     chan error
 	podMap    []string
+	resultDir string
 	stopCtx   context.Context
 	stopFn    context.CancelCauseFunc
 	mu        sync.Mutex
+}
+
+func NewWithOpts(opts ...Option) *Simulation {
+	s := &Simulation{
+		ID:        "",
+		logger:    logger.NewLogger(logger.LevelInfo, simulatorName),
+		Scenario:  nil,
+		Scheduler: scheduler.New(),
+		kubeMgr:   nil,
+		errCh:     make(chan error),
+		podMap:    make([]string, 0),
+		resultDir: defaultResultDir,
+	}
+
+	for _, opt := range opts {
+		opt(s)
+	}
+
+	if s.ID == "" {
+		scnName := strings.ReplaceAll(strings.ToLower(s.Scenario.Name), " ", "-")
+		s.ID = fmt.Sprintf("%s-%s", scnName, time.Now().Format("15-04-05"))
+	}
+
+	s.initializeEvents()
+	return s
+
 }
 
 func New(scn *scenario.Scenario, manager *utils.KubernetesManager) *Simulation {
@@ -42,10 +72,10 @@ func New(scn *scenario.Scenario, manager *utils.KubernetesManager) *Simulation {
 		kubeMgr:   manager,
 		errCh:     make(chan error),
 		podMap:    make([]string, 0),
+		resultDir: defaultResultDir,
 		stopCtx:   ctx,
 		stopFn:    fn,
 	}
-
 	s.initializeEvents()
 	return s
 }
@@ -115,16 +145,16 @@ func (s *Simulation) waitToFinish() error {
 }
 
 func (s *Simulation) exportMetrics() {
-	if err := NodeResourceMetric.ExportCSV(s.ID); err != nil {
+	if err := NodeResourceMetric.ExportCSV(s.resultDir, s.ID); err != nil {
 		s.logger.Error("error exporting csv: %v", err)
 	}
-	if err := eventTimelineMetric.ExportCSV(s.ID); err != nil {
+	if err := eventTimelineMetric.ExportCSV(s.resultDir, s.ID); err != nil {
 		s.logger.Error("error exporting csv: %v", err)
 	}
-	if err := podPendingDurationMetric.ExportCSV(s.ID); err != nil {
+	if err := podPendingDurationMetric.ExportCSV(s.resultDir, s.ID); err != nil {
 		s.logger.Error("error exporting csv: %v", err)
 	}
-	if err := pendingPodQueueMetric.ExportCSV(s.ID); err != nil {
+	if err := pendingPodQueueMetric.ExportCSV(s.resultDir, s.ID); err != nil {
 		s.logger.Error("error exporting csv: %v", err)
 	}
 }

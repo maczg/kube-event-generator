@@ -74,7 +74,7 @@ func Test_RunStart(t *testing.T) {
 	assert.Nil(t, err)
 
 	startTime := sim.Scheduler.StartedAt()
-	timeline, err := os.Open(fmt.Sprintf("%s-event_timeline.csv", sim.ID))
+	timeline, err := os.Open(fmt.Sprintf("results/%s-%s.csv", sim.ID, eventTimelineMetric.Info().Name))
 	assert.Nil(t, err)
 	defer timeline.Close()
 
