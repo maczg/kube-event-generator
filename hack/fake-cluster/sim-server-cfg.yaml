@@ -1,7 +1,3 @@
-# Configuration file for scheduler-simulator
-
-# This is an example config for scheduler-simulator.
-
 apiVersion: kube-scheduler-simulator-config/v1alpha1
 kind: SimulatorConfiguration
 
@@ -11,13 +7,13 @@ port: 1212
 
 # This is the URL for etcd. The simulator runs kube-apiserver
 # internally, and the kube-apiserver uses this etcd.
-etcdURL: "http://127.0.0.1:2379"
+etcdURL: "http://cluster:2379"
 
 # This URL represents the URL once web UI is started.
 # The simulator and internal kube-apiserver set the allowed
 # origin for CorsAllowedOriginList
 corsAllowedOriginList:
-  - "http://localhost:3000"
+  - "*"
 
 # This is for the beta feature "One-shot importing cluster's resources"
 # and "Continuous syncing cluster's resources".

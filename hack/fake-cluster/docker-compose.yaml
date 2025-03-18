@@ -1,7 +1,7 @@
 name: keg
 
 services:
-  simulator-scheduler:
+  scheduler:
     image: registry.k8s.io/scheduler-simulator/debuggable-scheduler:v0.4.0
     container_name: simulator-scheduler
     environment:
@@ -9,17 +9,20 @@ services:
     volumes:
       - ./scheduler.yaml:/config/scheduler.yaml
       - ./kubeconfig.yaml:/config/kubeconfig.yaml
+      - config:/config
     restart: always
     tty: true
     networks:
       - k8s-simulator
+    command: [ "./scheduler", "--config=/config/scheduler.yaml", "--master=http://cluster:3131" ]
 
-  simulator-cluster:
+  cluster:
     image: registry.k8s.io/kwok/cluster:v0.6.0-k8s.v1.30.2
-    container_name: simulator-cluster
+    container_name: cluster
     restart: always
     ports:
       - "3131:3131"
+      - "2379:2379"
     volumes:
       - ./kwok.yaml:/root/.kwok/kwok.yaml
     environment:
@@ -27,17 +30,18 @@ services:
     networks:
       - k8s-simulator
 
-  simulator-server:
+  server:
     image: registry.k8s.io/scheduler-simulator/simulator-backend:v0.4.0
     container_name: simulator-server
     volumes:
       - ./sim-server-cfg.yaml:/config.yaml
       - ./kubeconfig.yaml:/kubeconfig.yaml
       - /var/run/docker.sock:/var/run/docker.sock
+      - config:/config
     environment:
       - PORT=1212
-      - KUBE_SCHEDULER_SIMULATOR_ETCD_URL=http://simulator-cluster:2379
-      - KUBE_APISERVER_URL=http://simulator-cluster:3131
+      - KUBE_SCHEDULER_SIMULATOR_ETCD_URL=http://cluster:2379
+      - KUBE_APISERVER_URL=http://cluster:3131
     ports:
       - "1212:1212"
     restart: always
@@ -45,14 +49,14 @@ services:
     networks:
       - k8s-simulator
 
-  simulator-frontend:
+  frontend:
     image: registry.k8s.io/scheduler-simulator/simulator-frontend:v0.4.0
     restart: always
     container_name: simulator-frontend
     environment:
       - HOST=0.0.0.0
-      - BASE_URL=http://${SIMULATOR_EXTERNAL_IP:-localhost}:1212
-      - KUBE_API_SERVER_URL=http://${SIMULATOR_EXTERNAL_IP:-localhost}:3131
+      - BASE_URL=http://localhost:1212
+      - KUBE_API_SERVER_URL=http://localhost:3131
     ports:
       - "3000:3000"
     tty: true
@@ -62,3 +66,6 @@ services:
 networks:
   k8s-simulator:
     driver: bridge
+
+volumes:
+  config:
