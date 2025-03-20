@@ -95,6 +95,14 @@ func (g *InMemoryGaugeVec) Values() []Record {
 	return cp
 }
 
+func (g *InMemoryGaugeVec) LastValue(labels Labels) float64 {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	key := labels.toMapKey()
+	return g.lastValues[key]
+}
+
 // Collect implement prometheus.Collector so we can register this struct
 // directly with a prometheus.Registry.
 func (g *InMemoryGaugeVec) Collect(ch chan<- prometheus.Metric) {
@@ -106,8 +114,11 @@ func (g *InMemoryGaugeVec) Describe(ch chan<- *prometheus.Desc) {
 }
 
 func (g *InMemoryGaugeVec) ExportCSV(dir string, baseFileName string) error {
-
-	baseFileName = fmt.Sprintf("%s-%s.csv", baseFileName, g.metricName)
+	if baseFileName == "" {
+		baseFileName = fmt.Sprintf("%s.csv", g.metricName)
+	} else {
+		baseFileName = fmt.Sprintf("%s-%s.csv", baseFileName, g.metricName)
+	}
 
 	if dir != "" {
 		err := os.MkdirAll(dir, 0755)
@@ -171,6 +182,27 @@ func (g *InMemoryGaugeVec) ExportCSV(dir string, baseFileName string) error {
 		}
 	}
 	return nil
+}
+
+func (g *InMemoryGaugeVec) GetValueByLabel(searchLabels map[string]string) []Record {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	var results []Record
+	for _, record := range g.records {
+		match := true
+		for k, v := range searchLabels {
+			if record.labels[k] != v {
+				match = false
+				break
+			}
+		}
+		if match {
+			results = append(results, record)
+		}
+	}
+
+	return results
 }
 
 type GaugeInfo struct {

@@ -107,8 +107,15 @@ func (s *Simulation) startScheduler() {
 }
 
 func (s *Simulation) Start() error {
-	s.logger.Info("resetting cluster")
+	var host string
+	if s.kubeMgr.RestCfg() != nil {
+		host = s.kubeMgr.RestCfg().Host
+	} else {
+		host = "unknown"
+	}
+	s.logger.Info("kube host: %s", host)
 
+	s.logger.Info("resetting cluster")
 	if err := s.resetCluster(); err != nil {
 		return err
 	}
@@ -141,21 +148,6 @@ func (s *Simulation) waitToFinish() error {
 			s.stopFn(err)
 			return err
 		}
-	}
-}
-
-func (s *Simulation) exportMetrics() {
-	if err := NodeResourceMetric.ExportCSV(s.resultDir, s.ID); err != nil {
-		s.logger.Error("error exporting csv: %v", err)
-	}
-	if err := eventTimelineMetric.ExportCSV(s.resultDir, s.ID); err != nil {
-		s.logger.Error("error exporting csv: %v", err)
-	}
-	if err := podPendingDurationMetric.ExportCSV(s.resultDir, s.ID); err != nil {
-		s.logger.Error("error exporting csv: %v", err)
-	}
-	if err := pendingPodQueueMetric.ExportCSV(s.resultDir, s.ID); err != nil {
-		s.logger.Error("error exporting csv: %v", err)
 	}
 }
 
@@ -226,4 +218,136 @@ func (s *Simulation) resetCluster() error {
 		}
 	}
 	return s.kubeMgr.ResetPods()
+}
+
+func (s *Simulation) summarizeMetrics() {
+	s.logger.Info("===== Simulation Summary =====")
+
+	// 1) Summarize Pod Pending Durations (pod_pending_duration metric)
+	records := timeToSchedulePodMetric.Values()
+	var total, maxVal, avg float64
+	if len(records) > 0 {
+		for _, r := range records {
+			total += r.Value()
+			if r.Value() > maxVal {
+				maxVal = r.Value()
+			}
+		}
+		avg = total / float64(len(records))
+		s.logger.Info("Pod Pending Duration: count=%d, avg=%.2fs, max=%.2fs",
+			len(records), avg, maxVal)
+	} else {
+		s.logger.Info("No pods recorded in timeToSchedulePodMetric.")
+	}
+
+	// 2) Summarize Pending Queue Length (pending_pods metric)
+	queueRecs := pendingPodQueueMetric.Values()
+	var maxQueue float64
+	if len(queueRecs) > 0 {
+
+		for _, r := range queueRecs {
+			// Only look at “pending” label if that’s how you track the queue
+			if statusVal, ok := r.Labels()["status"]; ok && statusVal == "pending" {
+				if r.Value() > maxQueue {
+					maxQueue = r.Value()
+				}
+			}
+		}
+		s.logger.Info("Max Pending Queue Length: %.0f", maxQueue)
+	} else {
+		s.logger.Info("No records found in pendingPodQueueMetric.")
+	}
+
+	s.summarizeNodeUtilization()
+
+	//// 3) Summarize Final Node Resource Usage (node_resource_usage metric)
+	////    Here we’ll look at each node’s last CPU/memory record we have.
+	//nodeRecs := NodeResourceMetric.Values()
+	//// A map of (nodeName -> resourceKind -> float64 (last usage))
+	//finalUsage := make(map[string]map[string]float64)
+	//for _, r := range nodeRecs {
+	//	nodeName := r.Labels()["node"]     // from metric.WithLabels(nodeName, "cpu" or "memory")
+	//	resource := r.Labels()["resource"] // "cpu" or "memory"
+	//	if _, ok := finalUsage[nodeName]; !ok {
+	//		finalUsage[nodeName] = make(map[string]float64)
+	//	}
+	//	finalUsage[nodeName][resource] = r.Value()
+	//}
+	//for node, usageMap := range finalUsage {
+	//	s.logger.Info("Final usage for node %s -> CPU: %.2f, Memory: %.2f",
+	//		node,
+	//		usageMap["cpu"],
+	//		usageMap["memory"])
+	//}
+
+	s.logger.Info("===== End of Simulation Summary =====")
+}
+
+func (s *Simulation) summarizeNodeUtilization() {
+	nodeCapacities := make(map[string]map[string]float64) // nodeName -> { "cpu": <cap>, "memory": <cap> }
+	type ratioStats struct {
+		values []float64
+	}
+	nodeRatios := make(map[string]map[string]*ratioStats)
+
+	for _, node := range s.Scenario.Cluster.Nodes {
+		nodeCapacities[node.Name] = map[string]float64{
+			"cpu":    node.Status.Capacity.Cpu().AsApproximateFloat64(),
+			"memory": node.Status.Capacity.Memory().AsApproximateFloat64(),
+		}
+		nodeRatios[node.Name] = map[string]*ratioStats{
+			"cpu":    &ratioStats{values: []float64{}},
+			"memory": &ratioStats{values: []float64{}},
+		}
+	}
+	usageRecords := NodeResourceMetric.Values()
+	for _, r := range usageRecords {
+		nodeName := r.Labels()["node"]
+		resource := r.Labels()["resource"]
+		capMap, nodeExists := nodeCapacities[nodeName]
+		if !nodeExists {
+			// Possibly we have a usage record for a node not in scenario, skip it
+			continue
+		}
+		capVal := capMap[resource]
+		if capVal == 0 {
+			// Avoid division by zero if the node somehow has zero capacity
+			continue
+		}
+		// ratio = usage / capacity
+		ratio := r.Value() / capVal
+
+		stats, ok := nodeRatios[nodeName][resource]
+		if !ok {
+			// If we see a resource type not in scenario, skip
+			continue
+		}
+		stats.values = append(stats.values, ratio)
+	}
+
+	for nodeName, resMap := range nodeRatios {
+		s.logger.Info("Node: %s", nodeName)
+		for resource, stats := range resMap {
+			values := stats.values
+			if len(values) == 0 {
+				s.logger.Info("  Resource: %s -> No usage records", resource)
+				continue
+			}
+			var sum, minVal, maxVal float64
+			minVal = 999999.0
+			for _, v := range values {
+				sum += v
+				if v < minVal {
+					minVal = v
+				}
+				if v > maxVal {
+					maxVal = v
+				}
+			}
+			avgVal := sum / float64(len(values))
+			s.logger.Info("  Resource: %s -> data points=%d, min=%.2f, avg=%.2f, max=%.2f",
+				resource, len(values), minVal, avgVal, maxVal)
+		}
+	}
+
 }

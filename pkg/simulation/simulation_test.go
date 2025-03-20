@@ -1,13 +1,9 @@
 package simulation
 
 import (
-	"encoding/csv"
-	"fmt"
-	"github.com/maczg/kube-event-generator/pkg/metric"
 	"github.com/maczg/kube-event-generator/pkg/scenario"
 	"github.com/maczg/kube-event-generator/pkg/utils"
 	"github.com/stretchr/testify/assert"
-	"os"
 	"testing"
 )
 
@@ -63,25 +59,14 @@ func Test_RunStart(t *testing.T) {
 	scn, err := scenario.Load(testScenarioBytes)
 	assert.Nil(t, err)
 
-	client, err := utils.MakeClientSet()
+	client, _, err := utils.MakeClientSet()
 	assert.Nil(t, err)
 
-	mgr := utils.NewKubernetesManager(client)
+	mgr := utils.NewKubernetesManager(client, nil)
 
 	sim := New(scn, mgr)
 	err = sim.Start()
 
 	assert.Nil(t, err)
-
-	startTime := sim.Scheduler.StartedAt()
-	timeline, err := os.Open(fmt.Sprintf("results/%s-%s.csv", sim.ID, eventTimelineMetric.Info().Name))
-	assert.Nil(t, err)
-	defer timeline.Close()
-
-	reader := csv.NewReader(timeline)
-	records, err := reader.ReadAll()
-	assert.NoError(t, err)
-
-	assert.Equal(t, startTime.Add(scn.Events[0].From).Format(metric.TimestampFormat), records[1][0])
 
 }

@@ -12,35 +12,41 @@ import (
 
 type KubernetesManager struct {
 	clientset *kubernetes.Clientset
+	restCfg   *rest.Config
 	nodeFactory
 	podFactory
 }
 
-func NewKubernetesManager(clientset *kubernetes.Clientset) *KubernetesManager {
+func NewKubernetesManager(clientset *kubernetes.Clientset, restCfg *rest.Config) *KubernetesManager {
 	return &KubernetesManager{
 		clientset: clientset,
+		restCfg:   restCfg,
 	}
+}
+
+func (m *KubernetesManager) RestCfg() *rest.Config {
+	return m.restCfg
 }
 
 func (m *KubernetesManager) Clientset() *kubernetes.Clientset {
 	return m.clientset
 }
 
-func MakeClientSet() (*kubernetes.Clientset, error) {
+func MakeClientSet() (*kubernetes.Clientset, *rest.Config, error) {
 	config, err := rest.InClusterConfig()
 	if err != nil {
 		logrus.Warnf("%v", err)
 		kubeconfig := fmt.Sprintf("%s/.kube/config", os.Getenv("HOME"))
 		config, err = clientcmd.BuildConfigFromFlags("", kubeconfig)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get kubeconfig: %v", err)
+			return nil, nil, fmt.Errorf("failed to get kubeconfig: %v", err)
 		}
 	}
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create clientset: %v", err)
+		return nil, nil, fmt.Errorf("failed to create clientset: %v", err)
 	}
-	return clientset, nil
+	return clientset, config, nil
 }
 
 func (m *KubernetesManager) ResetNodes() error {

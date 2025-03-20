@@ -44,7 +44,7 @@ func (s *Simulation) handlePodModified(p *corev1.Pod, runningPod map[string]bool
 			eventTimelineMetric.Set(1, metric.WithLabels(p.Name, "running"))
 			// Calculate the duration from creation to running
 			duration := time.Since(p.CreationTimestamp.Time).Seconds()
-			podPendingDurationMetric.Set(duration, metric.WithLabels(p.Name))
+			timeToSchedulePodMetric.Set(duration, metric.WithLabels(p.Name))
 			if pendingPods[p.Name] {
 				pendingPodQueueMetric.Sub(1, metric.WithLabels("pending")) // Decrement the gauge when a pod starts running
 				delete(pendingPods, p.Name)                                // Remove the pod from the pending map
@@ -74,6 +74,7 @@ func (s *Simulation) updateNodeResourceMetrics(p *corev1.Pod, factor float64) {
 
 	NodeResourceMetric.Add(cpu, metric.WithLabels(nodeName, "cpu"))
 	NodeResourceMetric.Add(mem, metric.WithLabels(nodeName, "memory"))
+
 }
 
 func (s *Simulation) removePodFromMap(podName string) {

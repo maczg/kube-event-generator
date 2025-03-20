@@ -1,17 +1,29 @@
 name: keg
 
 services:
+
+
+  init-conf:
+    image: busybox
+    volumes:
+      - conf:/config
+      - ./kubeconfig.yaml:/kubeconfig.yaml
+      - ./scheduler.yaml:/scheduler.yaml
+      - ./simconfig.yaml:/simconfig.yaml
+    command: sh -c "cp -rf /simconfig.yaml /scheduler.yaml /kubeconfig.yaml /config"
+
   scheduler:
     image: registry.k8s.io/scheduler-simulator/debuggable-scheduler:v0.4.0
     container_name: simulator-scheduler
     environment:
       - KUBECONFIG=/config/kubeconfig.yaml
     volumes:
-      - ./scheduler.yaml:/config/scheduler.yaml
-      - ./kubeconfig.yaml:/config/kubeconfig.yaml
-      - config:/config
+      - conf:/config
     restart: always
     tty: true
+    depends_on:
+      - server
+      - init-conf
     networks:
       - k8s-simulator
     command: [ "./scheduler", "--config=/config/scheduler.yaml", "--master=http://cluster:3131" ]
@@ -34,16 +46,18 @@ services:
     image: registry.k8s.io/scheduler-simulator/simulator-backend:v0.4.0
     container_name: simulator-server
     volumes:
-      - ./sim-server-cfg.yaml:/config.yaml
+      - ./simconfig.yaml:/config.yaml
       - ./kubeconfig.yaml:/kubeconfig.yaml
       - /var/run/docker.sock:/var/run/docker.sock
-      - config:/config
+      - conf:/config
     environment:
       - PORT=1212
       - KUBE_SCHEDULER_SIMULATOR_ETCD_URL=http://cluster:2379
       - KUBE_APISERVER_URL=http://cluster:3131
     ports:
       - "1212:1212"
+    depends_on:
+      - init-conf
     restart: always
     tty: true
     networks:
@@ -68,4 +82,4 @@ networks:
     driver: bridge
 
 volumes:
-  config:
+  conf:

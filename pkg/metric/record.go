@@ -1,4 +1,6 @@
-// Package metric Only god and ChatGPT knows what is happening here
+// Package metric provides a simple interface to record metrics.
+//
+// Only god and ChatGPT knows what is happening here
 package metric
 
 import (
@@ -12,4 +14,16 @@ type Record struct {
 	labels map[string]string
 	// value of the record
 	value float64
+}
+
+func (r Record) Timestamp() time.Time {
+	return r.timestamp
+}
+
+func (r Record) Labels() map[string]string {
+	return r.labels
+}
+
+func (r Record) Value() float64 {
+	return r.value
 }
