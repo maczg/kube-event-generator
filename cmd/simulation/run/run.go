@@ -20,11 +20,12 @@ var Cmd = &cobra.Command{
 			logrus.Fatalf("Failed to load scenario file: %v", err)
 		}
 
-		clientset, err := utils.MakeClientSet()
+		clientset, cfg, err := utils.MakeClientSet()
 		if err != nil {
 			logrus.Fatalf("Failed to create clientset: %v", err)
 		}
-		mgr := utils.NewKubernetesManager(clientset)
+
+		mgr := utils.NewKubernetesManager(clientset, cfg)
 		sim := simulation.New(scn, mgr)
 
 		logrus.Fatalln(sim.Start())

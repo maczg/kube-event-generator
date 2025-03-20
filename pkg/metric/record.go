@@ -13,3 +13,15 @@ type Record struct {
 	// value of the record
 	value float64
 }
+
+func (r Record) Timestamp() time.Time {
+	return r.timestamp
+}
+
+func (r Record) Labels() map[string]string {
+	return r.labels
+}
+
+func (r Record) Value() float64 {
+	return r.value
+}

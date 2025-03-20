@@ -106,8 +106,11 @@ func (g *InMemoryGaugeVec) Describe(ch chan<- *prometheus.Desc) {
 }
 
 func (g *InMemoryGaugeVec) ExportCSV(dir string, baseFileName string) error {
-
-	baseFileName = fmt.Sprintf("%s-%s.csv", baseFileName, g.metricName)
+	if baseFileName == "" {
+		baseFileName = fmt.Sprintf("%s.csv", g.metricName)
+	} else {
+		baseFileName = fmt.Sprintf("%s-%s.csv", baseFileName, g.metricName)
+	}
 
 	if dir != "" {
 		err := os.MkdirAll(dir, 0755)
