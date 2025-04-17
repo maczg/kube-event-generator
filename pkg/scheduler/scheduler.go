@@ -9,117 +9,98 @@ import (
 	"time"
 )
 
-var (
-	ErrAlreadyRunning = errors.New("scheduler already running")
-	ErrNotRunning     = errors.New("scheduler not running")
-)
-
 type Scheduler interface {
-	// Start starts scheduling queue
-	Start() error
-	// Stop stops scheduling queue
+	// Start starts scheduling queue. It blocks until the scheduler is stopped.
+	Start(ctx context.Context) error
+	// Stop stops scheduling queue. It returns an error if the scheduler is not running.
 	Stop() error
-	// Schedule an Schedulable on the scheduler queue
 	Schedule(e Schedulable)
-	// StartedAt returns the time when the scheduler started
 	StartedAt() time.Time
+	GetEvents() []Schedulable
 }
 
 type scheduler struct {
 	mu        sync.Mutex
-	queue     Queue[Schedulable]
+	queue     *Queue[Schedulable]
 	startTime time.Time
-	cancelCtx context.Context
-	cancelFn  context.CancelFunc
 	running   bool
 	stopCh    chan struct{}
-	// eventCh is used to receive Schedulable popped from the heap
-	eventCh chan Schedulable
 }
 
-func New() Scheduler {
-	ctx, cancel := context.WithCancel(context.Background())
-	s := scheduler{
-		queue:     *NewQueue[Schedulable](SchedulableCmpFn),
-		cancelCtx: ctx,
-		cancelFn:  cancel,
-		running:   false,
-		stopCh:    make(chan struct{}),
-		eventCh:   make(chan Schedulable),
-	}
-	return &s
+func (s *scheduler) GetEvents() []Schedulable {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.queue.items
 }
 
-func (s *scheduler) Start() error {
+func (s *scheduler) Start(ctx context.Context) error {
+	logrus.Info("scheduler started")
 	s.mu.Lock()
 	if s.running {
 		s.mu.Unlock()
 		return ErrAlreadyRunning
 	}
 	s.running = true
-	s.mu.Unlock()
 	s.startTime = time.Now()
-	logrus.Infoln("starting scheduler")
-
-	go s.run()
-
-	for {
-		select {
-		case <-s.cancelCtx.Done():
-			return nil
-		case e := <-s.eventCh:
-			go s.processEvent(e)
-		}
-	}
-}
-
-func (s *scheduler) Stop() error {
-	s.mu.Lock()
-	if !s.running {
-		s.mu.Unlock()
-		return ErrNotRunning
-	}
-	s.cancelFn()
-	s.running = false
+	s.stopCh = make(chan struct{})
 	s.mu.Unlock()
-	return nil
-}
-
-func (s *scheduler) run() {
 	for {
 		select {
-		case <-s.cancelCtx.Done():
-			logrus.Infoln("ctx Done, stopping")
-			return
+		case <-ctx.Done():
+			logrus.Debug("ctx Done, scheduler stopped")
+			cause := ctx.Err()
+			if cause != nil && !errors.Is(cause, context.Canceled) {
+				logrus.Errorf("scheduler stopped due to: %v", cause)
+			}
+			return nil
+		case <-s.stopCh:
+			logrus.Info("scheduler stopped")
+			return nil
 		default:
 			s.mu.Lock()
 			if s.queue.Len() == 0 {
 				s.mu.Unlock()
 				continue
 			}
-			if s.startTime.Add(s.queue.Peek().After()).After(time.Now()) {
+			if s.startTime.Add((*s.queue.Peek()).ExecuteAfterDuration()).After(time.Now()) {
 				s.mu.Unlock()
 				continue
 			}
-			e := heap.Pop(&s.queue).(Schedulable)
+			e := heap.Pop(s.queue).(Schedulable)
 			s.mu.Unlock()
-			s.eventCh <- e
+			go func() {
+				if err := e.Execute(ctx); err != nil {
+					logrus.Errorf("failed to execute event %s: %v", e.ID(), err)
+				}
+			}()
 		}
 	}
 }
 
-func (s *scheduler) processEvent(e Schedulable) {
-	err := e.Run(s.cancelCtx)
-	if err != nil {
-		logrus.Errorf("event [%s] return error: %v", e.ID(), err)
+func (s *scheduler) Stop() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.running {
+		return ErrNotRunning
 	}
-	logrus.Debugf("event [%s] finished", e.ID())
+	close(s.stopCh)
+	return nil
 }
 
 func (s *scheduler) Schedule(e Schedulable) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.queue.Add(e)
+	s.queue.Push(e)
 }
 
-func (s *scheduler) StartedAt() time.Time { return s.startTime }
+func (s *scheduler) StartedAt() time.Time {
+	return s.startTime
+}
+
+func New() Scheduler {
+	s := scheduler{
+		queue:  NewQueue[Schedulable](),
+		stopCh: make(chan struct{}),
+	}
+	return &s
+}

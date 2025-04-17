@@ -2,25 +2,50 @@ package scenario
 
 import (
 	"cmp"
+	"context"
+	"fmt"
 	"github.com/ghodss/yaml"
-	"github.com/jedib0t/go-pretty/v6/table"
-	"io"
+	"github.com/google/uuid"
+	"github.com/sirupsen/logrus"
+	"k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 	"os"
 	"slices"
+	"time"
 )
 
-type Metadata struct {
-	Name      string `yaml:"name" json:"name"`
-	CreatedAt string `yaml:"created_at" json:"created_at"`
+type Scenario struct {
+	Metadata Metadata `yaml:"metadata" json:"metadata"`
+	Cluster  *Cluster `yaml:"cluster" json:"cluster"`
+	Events   *Events  `yaml:"events" json:"events"`
 }
 
-type Scenario struct {
-	//NodeName string `yaml:"name" json:"name"`
-	Metadata Metadata `yaml:"metadata" json:"metadata"`
-	// Cluster state
-	Cluster Cluster `yaml:"cluster" json:"cluster"`
-	// Events that will be applied to the cluster
-	Events []Event `yaml:"events" json:"events"`
+func (s *Scenario) Describe() {
+	if s.Cluster != nil {
+		for _, node := range s.Cluster.Nodes {
+			logrus.Infof("node %s allocatable [cpu: %s,mem %s,pod s%s]", node.Name, node.Status.Allocatable.Cpu().String(), node.Status.Allocatable.Memory().String(), node.Status.Allocatable.Pods().String())
+		}
+	} else {
+		logrus.Warn("cluster is not set")
+	}
+	if s.Events.SchedulerConfigs != nil {
+		for _, event := range s.Events.SchedulerConfigs {
+			logrus.Infof("scheduler config %s [from: %s]", event.ID(), event.ExecuteAfterDuration().String())
+		}
+	} else {
+		logrus.Warn("scheduler config is not set")
+	}
+	if s.Events.Pods != nil {
+		longest := s.Events.GetLongestEvent()
+		biggestCpu := s.Events.GetLargerCpuRequest()
+		biggestMem := s.Events.GetLargerMemRequest()
+		logrus.Infof("longest pod event %s [from: %s]", longest.Name, longest.ExecuteAfterDuration().String())
+		cpuMax := biggestCpu.Pod.Spec.Containers[0].Resources.Requests[v1.ResourceCPU]
+		memMax := biggestMem.Pod.Spec.Containers[0].Resources.Requests[v1.ResourceMemory]
+		logrus.Infof("biggest event by cpu %s [cpu: %s]", biggestCpu.Name, cpuMax.String())
+		logrus.Infof("biggest event by mem %s [mem: %s]", biggestMem.Name, memMax.String())
+	}
 }
 
 func Load(data []byte) (*Scenario, error) {
@@ -32,7 +57,7 @@ func Load(data []byte) (*Scenario, error) {
 	return &s, nil
 }
 
-func LoadYaml(filename string) (*Scenario, error) {
+func LoadFromYaml(filename string) (*Scenario, error) {
 	data, err := os.ReadFile(filename)
 	if err != nil {
 		return nil, err
@@ -40,7 +65,42 @@ func LoadYaml(filename string) (*Scenario, error) {
 	return Load(data)
 }
 
-func (s *Scenario) Dump(filename string) error {
+type Opt func(*Scenario)
+
+func WithCluster(cluster *Cluster) Opt {
+	return func(s *Scenario) {
+		s.Cluster = cluster
+	}
+}
+func WithPodEvents(events []*PodEvent) Opt {
+	return func(s *Scenario) {
+		s.Events.Pods = events
+	}
+}
+
+func WithName(name string) Opt {
+	return func(s *Scenario) {
+		s.Metadata.Name = name
+		s.Metadata.CreatedAt = time.Now()
+	}
+}
+
+func NewScenario(opts ...Opt) *Scenario {
+	s := &Scenario{
+		Cluster: &Cluster{},
+		Events:  &Events{},
+	}
+	for _, opt := range opts {
+		opt(s)
+	}
+	if s.Metadata.Name == "" {
+		s.Metadata.Name = fmt.Sprintf("default-%s", uuid.New().String()[0:3])
+		s.Metadata.CreatedAt = time.Now()
+	}
+	return s
+}
+
+func (s *Scenario) ToYaml(filename string) error {
 	file, err := os.Create(filename)
 	if err != nil {
 		return err
@@ -54,39 +114,74 @@ func (s *Scenario) Dump(filename string) error {
 	return err
 }
 
-func (s *Scenario) Describe(writers ...io.Writer) {
-	if len(writers) == 0 {
-		writers = append(writers, os.Stdout)
+type Metadata struct {
+	Name      string    `yaml:"name" json:"name"`
+	CreatedAt time.Time `yaml:"createdAt" json:"createdAt"`
+}
+
+// Cluster represents the cluster configuration.
+type Cluster struct {
+	Nodes []*v1.Node `yaml:"nodes" json:"nodes"`
+}
+
+func (c *Cluster) Create(clientset *kubernetes.Clientset) error {
+	for _, node := range c.Nodes {
+		_, err := clientset.CoreV1().Nodes().Create(context.TODO(), node, metav1.CreateOptions{})
+		if err != nil {
+			return fmt.Errorf("failed to create node %s: %v", node.Name, err)
+		}
 	}
-	t := table.NewWriter()
-	t.SetOutputMirror(io.MultiWriter(writers...))
+	return nil
+}
 
-	t.AppendSeparator()
-	t.AppendRow(table.Row{"Cluster", "", ""})
-	t.AppendSeparator()
-	t.AppendRow(table.Row{"node", "cpu", "memory"})
-	for _, n := range s.Cluster.Nodes {
-		t.AppendRow(table.Row{
-			n.Name,
-			n.Status.Capacity.Cpu(),
-			n.Status.Capacity.Memory(),
-		})
+func NewCluster() *Cluster {
+	return &Cluster{
+		Nodes: make([]*v1.Node, 0),
 	}
+}
 
-	t.AppendSeparator()
-	t.AppendRow(table.Row{"Events", "", ""})
-	t.AppendSeparator()
-	t.AppendRow(table.Row{"# events", "longest", "duration"})
-	numEvents := len(s.Events)
-	// Using slices.MaxFunc to get the event with the longest duration (assumed to be the one with the maximum From value)
-	longest := slices.MaxFunc(s.Events, func(a, b Event) int {
-		return cmp.Compare(a.From, b.From)
-	})
+type Events struct {
+	Pods             []*PodEvent       `yaml:"pods" json:"pods"`
+	SchedulerConfigs []*SchedulerEvent `yaml:"schedulerConfigs" json:"schedulerConfigs"`
+}
 
-	t.AppendRow(table.Row{
-		numEvents,
-		longest.From,
-		"",
+func (e *Events) GetLargerCpuRequest() *PodEvent {
+	if len(e.Pods) == 0 {
+		return nil
+	}
+	largest := slices.MaxFunc(e.Pods, func(a, b *PodEvent) int {
+		cpuA := a.Pod.Spec.Containers[0].Resources.Requests[v1.ResourceCPU]
+		cpuB := b.Pod.Spec.Containers[0].Resources.Requests[v1.ResourceCPU]
+		return cmp.Compare(cpuA.Value(), cpuB.Value())
 	})
-	t.Render()
+	return largest
+}
+
+func (e *Events) GetLargerMemRequest() *PodEvent {
+	if len(e.Pods) == 0 {
+		return nil
+	}
+	largest := slices.MaxFunc(e.Pods, func(a, b *PodEvent) int {
+		memA := a.Pod.Spec.Containers[0].Resources.Requests[v1.ResourceMemory]
+		memB := b.Pod.Spec.Containers[0].Resources.Requests[v1.ResourceMemory]
+		return cmp.Compare(memA.Value(), memB.Value())
+	})
+	return largest
+}
+
+func (e *Events) GetLongestEvent() *PodEvent {
+	if len(e.Pods) == 0 {
+		return nil
+	}
+	longest := slices.MaxFunc(e.Pods, func(a, b *PodEvent) int {
+		return cmp.Compare(a.ExecuteAfterDuration(), b.ExecuteAfterDuration())
+	})
+	return longest
+}
+
+func NewEvents() *Events {
+	return &Events{
+		Pods:             make([]*PodEvent, 0),
+		SchedulerConfigs: make([]*SchedulerEvent, 0),
+	}
 }

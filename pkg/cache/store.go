@@ -1,7 +1,6 @@
 package cache
 
 import (
-	"github.com/maczg/kube-event-generator/pkg/logger"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/informers"
@@ -24,7 +23,8 @@ type Store struct {
 	stopCh chan struct{}
 }
 
-func NewStore(clientset *kubernetes.Clientset, logLevel logger.LogLevel) *Store {
+// NewStore creates a new Store instance and starts the informers immediately.
+func NewStore(clientset *kubernetes.Clientset) *Store {
 	ni := &Store{
 		mu:        &sync.RWMutex{},
 		clientset: clientset,
@@ -38,7 +38,7 @@ func NewStore(clientset *kubernetes.Clientset, logLevel logger.LogLevel) *Store 
 // Start starts the informers for nodes and pods.
 // Returns immediately after starting the informers.
 func (s *Store) Start() {
-	logrus.Infoln("starting")
+	logrus.Infoln("starting store")
 	factory := informers.NewSharedInformerFactory(s.clientset, 0)
 	nodeInformer := factory.Core().V1().Nodes().Informer()
 	podInformer := factory.Core().V1().Pods().Informer()
@@ -102,6 +102,9 @@ func (s *Store) addPod(obj interface{}) {
 	pod := obj.(*v1.Pod)
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	s.stats.UpdatePodEvent(NewPodEvent(pod, "add"))
+
 	if pod.Status.Phase == v1.PodPending {
 		logrus.Debugf("[onAdd] pod %s added to pending queue", pod.Name)
 		s.stats.UpdatePendingQ(pod, AddPodToPendingQ)
@@ -120,6 +123,8 @@ func (s *Store) updatePod(oldObj, newObj interface{}) {
 	newPod := newObj.(*v1.Pod)
 	oldPodNodeName := oldPod.Spec.NodeName
 	newPodNodeName := newPod.Spec.NodeName
+
+	s.stats.UpdatePodEvent(NewPodEvent(newPod, "update"))
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -168,6 +173,8 @@ func (s *Store) updatePod(oldObj, newObj interface{}) {
 
 func (s *Store) deletePod(obj interface{}) {
 	pod := obj.(*v1.Pod)
+	s.stats.UpdatePodEvent(NewPodEvent(pod, "delete"))
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	logrus.Debugf("[onDelete] pod %s deleted", pod.Name)
@@ -229,7 +236,8 @@ func (s *Store) GetNodesInfo() []NodeStore {
 
 // TODO improve me
 
-// WatchEvery logs the status of all nodes every `seconds` seconds
+// WatchEvery logs the status of all nodes every `seconds` seconds.
+// It blocks until the stop channel is closed.
 func (s *Store) WatchEvery(seconds int) {
 	logrus.Infof("logging every %d seconds", seconds)
 	ticker := time.NewTicker(time.Duration(seconds) * time.Second)

@@ -1,0 +1,15 @@
+scenarioName: "scenario"
+outputDir: "scenarios"
+# The following are the default values for the scenario generation
+generation:
+  numPodEvents: 10
+  arrivalScale: 1.0
+  arrivalScaleFactor:  5.0
+  durationScale: 1.5
+  durationShape: 2.0
+  durationScaleFactor: 10.0
+  podCpuShape: 1.0
+  podCpuFactor: 1.0
+  podMemScale: 1.5
+  podMemShape: 512.0
+  podMemFactor: 1.0

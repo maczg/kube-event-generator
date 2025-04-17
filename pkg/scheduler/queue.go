@@ -2,55 +2,70 @@ package scheduler
 
 import (
 	"container/heap"
+	"sync"
 )
 
-// Queue is a type that implements heap.Interface and holds items of any type.
-type Queue[T any] struct {
+// Queue is a type that implements heap.Interface and holds items of Schedulable type.
+type Queue[T Schedulable] struct {
+	mu    sync.Mutex
 	items []T
-	less  func(a, b T) bool
 }
 
 // NewQueue creates a new Queue.
-func NewQueue[T any](less func(a, b T) bool) *Queue[T] {
+func NewQueue[T Schedulable]() *Queue[T] {
 	g := &Queue[T]{
+		mu:    sync.Mutex{},
 		items: []T{},
-		less:  less,
 	}
 	heap.Init(g)
 	return g
 }
 
-// Add adds an item to the heap.
-func (h *Queue[T]) Add(item T) { heap.Push(h, item) }
-
-// Items returns the items in the heap.
-func (h *Queue[T]) Items() []T { return h.items }
-
 // Peek returns the minimum item from the heap without removing it.
-func (h *Queue[T]) Peek() T { return h.items[0] }
-
-// Remove removes and returns the minimum item from the heap.
-func (h *Queue[T]) Remove() T { return heap.Pop(h).(T) }
+func (q *Queue[T]) Peek() *T {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if len(q.items) == 0 {
+		return nil
+	}
+	return &q.items[0]
+}
 
 // Len returns the number of items in the heap.
-func (h *Queue[T]) Len() int { return len(h.items) }
+func (q *Queue[T]) Len() int {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return len(q.items)
+}
 
 // Less returns whether the item at index i should sort before the item at index j.
-func (h *Queue[T]) Less(i, j int) bool {
-	return h.less(h.items[i], h.items[j])
+func (q *Queue[T]) Less(i, j int) bool {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return q.items[i].ComparePriority(q.items[j])
 }
 
 // Swap swaps the items at the given indices.
-func (h *Queue[T]) Swap(i, j int) { h.items[i], h.items[j] = h.items[j], h.items[i] }
+func (q *Queue[T]) Swap(i, j int) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.items[i], q.items[j] = q.items[j], q.items[i]
+}
 
 // Push adds an item to the heap.
-func (h *Queue[T]) Push(x any) { h.items = append(h.items, x.(T)) }
+func (q *Queue[T]) Push(x any) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.items = append(q.items, x.(T))
+}
 
 // Pop removes and returns the minimum item from the heap.
-func (h *Queue[T]) Pop() any {
-	old := h.items
+func (q *Queue[T]) Pop() any {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	old := q.items
 	n := len(old)
 	item := old[n-1]
-	h.items = old[0 : n-1]
+	q.items = old[0 : n-1]
 	return item
 }

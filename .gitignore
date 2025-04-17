@@ -3,6 +3,6 @@ trash/*
 results/*
 bin/*
 scenarios/*
-!scenarios/.gitkeep
+!scenarios/scenario.yaml
 !results/.gitkeep
 !results/example*

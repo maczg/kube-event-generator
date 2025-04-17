@@ -30,6 +30,33 @@ const (
 	RemovePodFromPendingQ
 )
 
+type PodEvent struct {
+	PodName   string
+	NodeName  string
+	Phase     string
+	EventType string
+	CpuReq    string
+	MemReq    string
+}
+
+func (p *PodEvent) String() string {
+	return fmt.Sprintf("[PodEvent] podName: %s, nodeName: %s, phase: %s, eventType: %s, cpuReq: %s, memReq: %s}",
+		p.PodName, p.NodeName, p.Phase, p.EventType, p.CpuReq, p.MemReq)
+}
+
+func NewPodEvent(pod *v1.Pod, eventType string) PodEvent {
+	cpu := pod.Spec.Containers[0].Resources.Requests[v1.ResourceCPU]
+	mem := pod.Spec.Containers[0].Resources.Requests[v1.ResourceMemory]
+	return PodEvent{
+		PodName:   pod.Name,
+		NodeName:  pod.Spec.NodeName,
+		Phase:     string(pod.Status.Phase),
+		EventType: eventType,
+		CpuReq:    cpu.String(),
+		MemReq:    mem.String(),
+	}
+}
+
 type Stats struct {
 	// PendingQ is a map of pod to the pod object that are in the pending queue.
 	PendingQ map[Key]*v1.Pod
@@ -45,6 +72,7 @@ type Stats struct {
 	AllocationRatioHistory map[Key][]Record[map[v1.ResourceName]float64]
 	// ResourceFreeHistory is a history of the free resource on the cluster nodes.
 	ResourceFreeHistory map[Key][]Record[v1.ResourceList]
+	PodEventHistory     []Record[PodEvent]
 }
 
 func NewStats() *Stats {
@@ -56,7 +84,15 @@ func NewStats() *Stats {
 		AllocationHistory:      make(map[Key][]Record[v1.ResourceList]),
 		AllocationRatioHistory: make(map[Key][]Record[map[v1.ResourceName]float64]),
 		ResourceFreeHistory:    make(map[Key][]Record[v1.ResourceList]),
+		PodEventHistory:        make([]Record[PodEvent], 0),
 	}
+}
+
+func (s *Stats) UpdatePodEvent(podEvent PodEvent) {
+	s.PodEventHistory = append(s.PodEventHistory, Record[PodEvent]{
+		At:    time.Now(),
+		Value: podEvent,
+	})
 }
 
 func (s *Stats) UpdateHistory(nodeStore NodeStore) {
@@ -115,6 +151,8 @@ func (s *Stats) GetPodQueueHistory() []Record[int] {
 	return cp
 }
 
+// ExportCSV exports the stats to a CSV file into the given directory.
+// If the directory does not exist, it will be created.
 func (s *Stats) ExportCSV(dir string) error {
 	if dir != "" {
 		err := os.MkdirAll(dir, 0755)
@@ -301,5 +339,33 @@ func (s *Stats) ExportCSV(dir string) error {
 		}
 		writer.Flush()
 	}
+
+	// event history
+	fileEventHistory, err := os.Create(fmt.Sprintf("%s/event_history.csv", dir))
+	if err != nil {
+		return err
+	}
+	defer fileEventHistory.Close()
+	writer = csv.NewWriter(fileEventHistory)
+	header = []string{"timestamp", "pod_name", "node_name", "phase", "event_type", "cpu_req", "mem_req"}
+	if err = writer.Write(header); err != nil {
+		return err
+	}
+	for _, record := range s.PodEventHistory {
+		row := []string{
+			record.At.Format(defaultTimeFormat),
+			record.Value.PodName,
+			record.Value.NodeName,
+			record.Value.Phase,
+			record.Value.EventType,
+			record.Value.CpuReq,
+			record.Value.MemReq,
+		}
+		if err = writer.Write(row); err != nil {
+			return err
+		}
+	}
+	writer.Flush()
+
 	return nil
 }
