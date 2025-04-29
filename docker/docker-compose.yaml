@@ -3,7 +3,7 @@ services:
     image: busybox
     volumes:
       - conf:/config
-      - ${PWD}/docker/:/host-config:ro
+      - ${PWD}:/host-config:ro
     command: sh -c "cp -rf /host-config/* /config/"
   simulator-scheduler:
     image: registry.k8s.io/scheduler-simulator/debuggable-scheduler:v0.4.0
@@ -19,9 +19,13 @@ services:
     tty: true
     networks:
       - simulator-internal-network
+
   simulator-server:
     image: registry.k8s.io/scheduler-simulator/simulator-backend:v0.4.0
     container_name: simulator-server
+    depends_on:
+      - simulator-cluster
+      - init-container
     volumes:
       - ./config.yaml:/config.yaml
       - ./kubeconfig.yaml:/kubeconfig.yaml
