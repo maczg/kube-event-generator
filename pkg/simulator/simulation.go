@@ -51,6 +51,11 @@ func (s *Simulation) LoadEvents() {
 			logrus.Warnf("event %s has duration 0. Simulation ends before is evicted", event.Pod.Name)
 		}
 	}
+	if s.scenario.Events.SchedulerConfigs != nil {
+		for _, event := range s.scenario.Events.SchedulerConfigs {
+			s.scheduler.Schedule(event)
+		}
+	}
 }
 
 func (s *Simulation) Start(ctx context.Context) error {

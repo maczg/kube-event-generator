@@ -1,6 +1,16 @@
 cluster:
   nodes: null
 events:
+  scheduler:
+    - name: NodeResourcesFit-10
+      after: 30s
+      weights:
+        NodeResourcesFit: 10
+    - name: NodeResourcesBalancedAllocation-10
+      after: 45s
+      weights:
+        NodeResourcesBalancedAllocation: 10
+        NodeResourcesFit: 1
   pods:
   - after: 25s
     duration: 53s

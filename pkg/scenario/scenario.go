@@ -142,7 +142,7 @@ func NewCluster() *Cluster {
 
 type Events struct {
 	Pods             []*PodEvent       `yaml:"pods" json:"pods"`
-	SchedulerConfigs []*SchedulerEvent `yaml:"schedulerConfigs" json:"schedulerConfigs"`
+	SchedulerConfigs []*SchedulerEvent `yaml:"scheduler" json:"scheduler"`
 }
 
 func (e *Events) GetLargerCpuRequest() *PodEvent {

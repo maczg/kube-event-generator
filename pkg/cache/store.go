@@ -202,8 +202,9 @@ func (s *Store) deletePod(obj interface{}) {
 			}
 		}
 
-		// update stats
-		s.stats.UpdateHistory(s.nodesInfo[pod.Spec.NodeName].Copy())
+		if nodeInfo, exist := s.nodesInfo[pod.Spec.NodeName]; exist {
+			s.stats.UpdateHistory(nodeInfo.Copy())
+		}
 	}
 }
 

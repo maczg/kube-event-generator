@@ -24,7 +24,7 @@ var (
 
 func init() {
 	Cmd.AddCommand(startCmd)
-	startCmd.Flags().BoolVarP(&reset, "cluster-reset", "r", false, "Reset the cluster before starting the simulation")
+	startCmd.Flags().BoolVarP(&reset, "reset", "r", false, "Reset the cluster before starting the simulation")
 	startCmd.Flags().StringVarP(&scenarioFile, "scenario", "s", "", "Path to the scenario file")
 	startCmd.Flags().BoolVarP(&saveMetrics, "save-metrics", "m", true, "Save metrics to the output directory")
 	startCmd.Flags().StringVarP(&outputDir, "output-dir", "o", "results", "Path to the output directory")
@@ -80,8 +80,10 @@ var startCmd = &cobra.Command{
 		}
 
 		if saveMetrics {
+			logrus.Infof("saving metrics to %s", outputDir)
+			dirName := fmt.Sprintf("%s/%s_%s", outputDir, scn.Metadata.Name, time.Now().Format("2006-01-02_15-04-05"))
 			stats := simulation.GetStats()
-			if err := stats.ExportCSV(fmt.Sprintf("%s/%s", outputDir, scn.Metadata.Name)); err != nil {
+			if err := stats.ExportCSV(dirName); err != nil {
 				return fmt.Errorf("failed to export metrics: %v", err)
 			}
 		}
