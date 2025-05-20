@@ -46,6 +46,10 @@ var startCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var clientset *kubernetes.Clientset
 		var scn *scenario.Scenario
+		dirName := fmt.Sprintf("%s/%s_%s", outputDir, scn.Metadata.Name, time.Now().Format("2006-01-02_15-04-05"))
+		if err := util.CreateDir(dirName); err != nil {
+			return fmt.Errorf("failed to create output directory: %v", err)
+		}
 
 		if s, err := scenario.LoadFromYaml(scenarioFile); err != nil {
 			return fmt.Errorf("failed to load scenario: %v", err)
@@ -81,7 +85,6 @@ var startCmd = &cobra.Command{
 
 		if saveMetrics {
 			logrus.Infof("saving metrics to %s", outputDir)
-			dirName := fmt.Sprintf("%s/%s_%s", outputDir, scn.Metadata.Name, time.Now().Format("2006-01-02_15-04-05"))
 			stats := simulation.GetStats()
 			if err := stats.ExportCSV(dirName); err != nil {
 				return fmt.Errorf("failed to export metrics: %v", err)
