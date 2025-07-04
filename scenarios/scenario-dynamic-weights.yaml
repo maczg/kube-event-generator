@@ -1,0 +1,172 @@
+cluster:
+  nodes:
+    - metadata:
+       name: node-1
+      status:
+        allocatable:
+          cpu: 4000m
+          memory: 8Gi
+          pods: 110
+        capacity:
+          cpu: 4000m
+          memory: 8Gi
+          pods: 110
+    - metadata:
+        name: node-2
+      status:
+        allocatable:
+          cpu: 2000m
+          memory: 16Gi
+          pods: 110
+        capacity:
+          cpu: 2000m
+          memory: 16Gi
+          pods: 110
+    - metadata:
+        name: node-3
+      status:
+        allocatable:
+          cpu: 4000m
+          memory: 8Gi
+          pods: 110
+        capacity:
+          cpu: 4000m
+          memory: 8Gi
+          pods: 110
+events:
+  scheduler:
+    # Initial phase: Balanced resource allocation
+    - name: initial-balanced
+      after: 0s
+      weights:
+        NodeResourcesFit: 1
+        NodeResourcesBalancedAllocation: 1
+        NodeAffinity: 1
+
+    # Phase 1: CPU-intensive workload phase
+    - name: optimize-cpu
+      after: 30s
+      weights:
+        NodeResourcesFit: 5
+        NodeResourcesBalancedAllocation: 1
+        NodeAffinity: 1
+
+    # Phase 2: Memory-intensive workload phase
+    - name: optimize-memory
+      after: 60s
+      weights:
+        NodeResourcesFit: 1
+        NodeResourcesBalancedAllocation: 5
+        NodeAffinity: 1
+
+    # Phase 3: Return to balanced allocation
+    - name: final-balanced
+      after: 90s
+      weights:
+        NodeResourcesFit: 1
+        NodeResourcesBalancedAllocation: 1
+        NodeAffinity: 1
+
+  pods:
+    # Phase 1: CPU-intensive workloads (0-30s)
+    - after: 5s
+      duration: 120s
+      name: cpu-intensive-1
+      pod:
+        metadata:
+          name: cpu-intensive-1
+          namespace: default
+        spec:
+          containers:
+          - image: nginx
+            name: server
+            resources:
+              requests:
+                cpu: 2000m
+                memory: 1Gi
+
+    - after: 10s
+      duration: 120s
+      name: cpu-intensive-2
+      pod:
+        metadata:
+          name: cpu-intensive-2
+          namespace: default
+        spec:
+          containers:
+          - image: nginx
+            name: server
+            resources:
+              requests:
+                cpu: 1500m
+                memory: 1Gi
+
+    # Phase 2: Memory-intensive workloads (30-60s)
+    - after: 35s
+      duration: 120s
+      name: memory-intensive-1
+      pod:
+        metadata:
+          name: memory-intensive-1
+          namespace: default
+        spec:
+          containers:
+          - image: nginx
+            name: server
+            resources:
+              requests:
+                cpu: 500m
+                memory: 4Gi
+
+    - after: 40s
+      duration: 120s
+      name: memory-intensive-2
+      pod:
+        metadata:
+          name: memory-intensive-2
+          namespace: default
+        spec:
+          containers:
+          - image: nginx
+            name: server
+            resources:
+              requests:
+                cpu: 500m
+                memory: 6Gi
+
+    # Phase 3: Mixed workloads (60-90s)
+    - after: 65s
+      duration: 120s
+      name: mixed-workload-1
+      pod:
+        metadata:
+          name: mixed-workload-1
+          namespace: default
+        spec:
+          containers:
+          - image: nginx
+            name: server
+            resources:
+              requests:
+                cpu: 1000m
+                memory: 2Gi
+
+    - after: 70s
+      duration: 120s
+      name: mixed-workload-2
+      pod:
+        metadata:
+          name: mixed-workload-2
+          namespace: default
+        spec:
+          containers:
+          - image: nginx
+            name: server
+            resources:
+              requests:
+                cpu: 800m
+                memory: 3Gi
+
+metadata:
+  name: dynamic-weights-scenario
+  description: "Scenario demonstrating dynamic scheduler weight optimization for mixed workloads" 

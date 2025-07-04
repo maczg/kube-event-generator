@@ -1,0 +1,22 @@
+{
+    "run_dir": "./results/scenario-100_2025-04-18_21-56-59",
+    "run_name": "scenario-100_2025-04-18_21-56-59",
+    "fragmentation": {
+        "cpu_fragmentation_mean": 0.12340733774921978,
+        "memory_fragmentation_mean": 0.17326916096904071,
+        "combined_fragmentation_mean": 0.14833824935913023,
+        "cpu_fragmentation_max": 0.7314519799726901,
+        "memory_fragmentation_max": 0.9365219259349025,
+        "combined_fragmentation_max": 0.7883054568588909,
+        "cpu_fragmentation_std": 0.12459076123081192,
+        "memory_fragmentation_std": 0.17486177458639543,
+        "combined_fragmentation_std": 0.13244088269688226,
+        "cpu_fragmentation_cv": 1.009589571440209,
+        "memory_fragmentation_cv": 1.0091915584311006,
+        "combined_fragmentation_cv": 0.8928302933941192,
+        "cpu_fragmentation_auc": 30586010953.0,
+        "memory_fragmentation_auc": 44015091550.0,
+        "combined_fragmentation_auc": 37300551251.0
+    },
+    "avg_pod_fit": 9.018759018759019
+}

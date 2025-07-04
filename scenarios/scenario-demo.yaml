@@ -1,0 +1,178 @@
+cluster:
+  nodes: null
+events:
+  pods:
+  - after: 3s
+    duration: 13s
+    name: pod-0
+    pod:
+      metadata:
+        creationTimestamp: null
+        name: pod-0
+        namespace: default
+      spec:
+        containers:
+        - image: nginx
+          name: server
+          resources:
+            requests:
+              cpu: 912m
+              memory: 544Mi
+      status: {}
+  - after: 7s
+    duration: 1s
+    name: pod-1
+    pod:
+      metadata:
+        creationTimestamp: null
+        name: pod-1
+        namespace: default
+      spec:
+        containers:
+        - image: nginx
+          name: server
+          resources:
+            requests:
+              cpu: 941m
+              memory: 288Mi
+      status: {}
+  - after: 30s
+    duration: 41s
+    name: pod-2
+    pod:
+      metadata:
+        creationTimestamp: null
+        name: pod-2
+        namespace: default
+      spec:
+        containers:
+        - image: nginx
+          name: server
+          resources:
+            requests:
+              cpu: 477m
+              memory: 561Mi
+      status: {}
+  - after: 43s
+    duration: 36s
+    name: pod-3
+    pod:
+      metadata:
+        creationTimestamp: null
+        name: pod-3
+        namespace: default
+      spec:
+        containers:
+        - image: nginx
+          name: server
+          resources:
+            requests:
+              cpu: 61m
+              memory: 109Mi
+      status: {}
+  - after: 43s
+    duration: 20s
+    name: pod-4
+    pod:
+      metadata:
+        creationTimestamp: null
+        name: pod-4
+        namespace: default
+      spec:
+        containers:
+        - image: nginx
+          name: server
+          resources:
+            requests:
+              cpu: 653m
+              memory: 139Mi
+      status: {}
+  - after: 46s
+    duration: 26s
+    name: pod-5
+    pod:
+      metadata:
+        creationTimestamp: null
+        name: pod-5
+        namespace: default
+      spec:
+        containers:
+        - image: nginx
+          name: server
+          resources:
+            requests:
+              cpu: 673m
+              memory: 116Mi
+      status: {}
+  - after: 47s
+    duration: 1m9s
+    name: pod-6
+    pod:
+      metadata:
+        creationTimestamp: null
+        name: pod-6
+        namespace: default
+      spec:
+        containers:
+        - image: nginx
+          name: server
+          resources:
+            requests:
+              cpu: 1454m
+              memory: 1320Mi
+      status: {}
+  - after: 1m1s
+    duration: 24s
+    name: pod-7
+    pod:
+      metadata:
+        creationTimestamp: null
+        name: pod-7
+        namespace: default
+      spec:
+        containers:
+        - image: nginx
+          name: server
+          resources:
+            requests:
+              cpu: 3001m
+              memory: 1272Mi
+      status: {}
+  - after: 1m11s
+    duration: 1s
+    name: pod-8
+    pod:
+      metadata:
+        creationTimestamp: null
+        name: pod-8
+        namespace: default
+      spec:
+        containers:
+        - image: nginx
+          name: server
+          resources:
+            requests:
+              cpu: 913m
+              memory: 44Mi
+      status: {}
+  - after: 1m12s
+    duration: 16s
+    name: pod-9
+    pod:
+      metadata:
+        creationTimestamp: null
+        name: pod-9
+        namespace: default
+      spec:
+        containers:
+        - image: nginx
+          name: server
+          resources:
+            requests:
+              cpu: 1435m
+              memory: 130Mi
+      status: {}
+  schedulerConfigs: null
+metadata:
+  createdAt: "2025-04-17T21:15:41.419015+02:00"
+  name: scenario-demo

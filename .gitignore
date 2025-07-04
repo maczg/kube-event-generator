@@ -1,10 +1,7 @@
 # custom
 .idea
 trash/*
-results/*
 bin/*
-scenarios/*
-!scenarios/scenario.yaml
 !results/.gitkeep
 !results/example*
 
