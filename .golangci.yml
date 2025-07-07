@@ -1,0 +1,247 @@
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  enable:
+    - gofmt
+    - goimports
+    - govet
+    - errcheck
+    - staticcheck
+    - unused
+    - gosimple
+    - ineffassign
+    - typecheck
+    - gocritic
+    - gosec
+    - dupl
+    - unconvert
+    - nakedret
+    - prealloc
+    - misspell
+    - lll
+    - unparam
+    - dogsled
+    - gocognit
+    - goconst
+    - gocyclo
+    - godot
+    - godox
+    - funlen
+    - whitespace
+    - wsl
+    - goprintffuncname
+    - nilerr
+    - exhaustive
+    - sqlclosecheck
+    - noctx
+    - bodyclose
+    - rowserrcheck
+    - stylecheck
+    - revive
+    - depguard
+    - durationcheck
+    - forcetypeassert
+    - importas
+    - makezero
+    - nilnil
+    - predeclared
+    - thelper
+    - wastedassign
+    - cyclop
+    - containedctx
+    - decorder
+    - exhaustruct
+    - forbidigo
+    - gomoddirectives
+    - gomodguard
+    - grouper
+    - loggercheck
+    - maintidx
+    - nolintlint
+    - paralleltest
+    - promlinter
+    - reassign
+    - testableexamples
+    - usestdlibvars
+
+  disable:
+    - gofumpt
+    - gci
+    - gochecknoinits
+    - gochecknoglobals
+    - wrapcheck
+    - varnamelen
+    - tagliatelle
+    - ireturn
+    - nlreturn
+
+linters-settings:
+  gofmt:
+    simplify: true
+  
+  goimports:
+    local-prefixes: github.com/maczg/kube-event-generator
+  
+  govet:
+    check-shadowing: true
+    enable-all: true
+  
+  revive:
+    ignore-generated-header: true
+    severity: warning
+    rules:
+      - name: blank-imports
+      - name: context-as-argument
+      - name: context-keys-type
+      - name: dot-imports
+      - name: error-return
+      - name: error-strings
+      - name: error-naming
+      - name: exported
+      - name: if-return
+      - name: increment-decrement
+      - name: var-naming
+      - name: var-declaration
+      - name: package-comments
+      - name: range
+      - name: receiver-naming
+      - name: time-naming
+      - name: unexported-return
+      - name: indent-error-flow
+      - name: errorf
+  
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - experimental
+      - opinionated
+      - performance
+      - style
+    disabled-checks:
+      - dupImport
+      - ifElseChain
+      - octalLiteral
+      - whyNoLint
+      - wrapperFunc
+  
+  gocyclo:
+    min-complexity: 15
+  
+  gocognit:
+    min-complexity: 20
+  
+  dupl:
+    threshold: 150
+  
+  funlen:
+    lines: 100
+    statements: 50
+  
+  lll:
+    line-length: 140
+  
+  misspell:
+    locale: US
+  
+  nakedret:
+    max-func-lines: 30
+  
+  prealloc:
+    simple: true
+    range-loops: true
+    for-loops: true
+  
+  goconst:
+    min-len: 3
+    min-occurrences: 3
+  
+  gosec:
+    includes:
+      - G401
+      - G402
+      - G501
+      - G502
+      - G503
+      - G504
+      - G505
+      - G601
+  
+  depguard:
+    rules:
+      main:
+        deny:
+          - pkg: "github.com/sirupsen/logrus"
+            desc: "Use pkg/logger instead of direct logrus import"
+  
+  godot:
+    scope: all
+    capital: true
+  
+  godox:
+    keywords:
+      - TODO
+      - BUG
+      - FIXME
+      - HACK
+  
+  stylecheck:
+    checks: ["all", "-ST1003"]
+    dot-import-whitelist:
+      - github.com/stretchr/testify/assert
+      - github.com/stretchr/testify/require
+  
+  cyclop:
+    max-complexity: 15
+    package-average: 0.0
+    skip-tests: true
+  
+  exhaustive:
+    default-signifies-exhaustive: true
+  
+  maintidx:
+    under: 20
+
+issues:
+  exclude-use-default: false
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  exclude-dirs:
+    - vendor
+    - .git
+    - .github
+    - .venv
+    - bin
+    - results
+    - scenarios
+  
+  exclude-rules:
+    # Exclude some linters from running on tests files
+    - path: _test\.go
+      linters:
+        - gocyclo
+        - errcheck
+        - dupl
+        - gosec
+        - funlen
+        - gocognit
+        - scopelint
+        - lll
+    
+    # Exclude some linters from running on main files
+    - path: cmd/.*\.go
+      linters:
+        - gochecknoglobals
+    
+    # Exclude generated files
+    - path: .*\.pb\.go
+      linters:
+        - all
+    
+    # Exclude vendor
+    - path: vendor/.*
+      linters:
+        - all
+  
+  fix: true

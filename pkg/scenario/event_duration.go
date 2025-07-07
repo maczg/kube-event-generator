@@ -1,8 +1,9 @@
 package scenario
 
 import (
-	"k8s.io/apimachinery/pkg/util/json"
 	"time"
+
+	"k8s.io/apimachinery/pkg/util/json"
 )
 
 // EventDuration is a custom type for representing event durations in JSON/YAML.
@@ -13,11 +14,14 @@ func (d *EventDuration) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &durationStr); err != nil {
 		return err
 	}
+
 	duration, err := time.ParseDuration(durationStr)
 	if err != nil {
 		return err
 	}
+
 	*d = EventDuration(duration)
+
 	return nil
 }
 

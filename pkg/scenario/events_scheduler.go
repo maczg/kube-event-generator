@@ -1,126 +1,128 @@
 package scenario
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
-	"github.com/maczg/kube-event-generator/pkg/scheduler"
-	"github.com/sirupsen/logrus"
-	"io"
-	kubescheduler "k8s.io/kube-scheduler/config/v1"
-	"net/http"
-	"os"
 	"time"
+
+	kubescheduler "k8s.io/kube-scheduler/config/v1"
+
+	"github.com/maczg/kube-event-generator/pkg/errors"
+	"github.com/maczg/kube-event-generator/pkg/logger"
+	"github.com/maczg/kube-event-generator/pkg/scheduler"
 )
 
-func getOrDefault(key, defaultValue string) string {
-	value := os.Getenv(key)
-	if value == "" {
-		return defaultValue
-	}
-	return value
-}
-
-var schedulerSimUrl = getOrDefault("SCHEDULER_SIM_URL", "http://localhost:1212/api/v1/schedulerconfiguration")
-
+// SchedulerEvent represents a scheduler configuration change event.
 type SchedulerEvent struct {
+	client       SchedulerClient
+	Weights      map[string]int32 `yaml:"weights" json:"weights"`
 	Name         string           `yaml:"name" json:"name"`
 	ExecuteAfter EventDuration    `yaml:"after" json:"after"`
-	Weights      map[string]int32 `yaml:"weights" json:"weights"`
-	httpClient   *http.Client
 }
 
-func (e *SchedulerEvent) ID() string { return e.Name }
+// NewSchedulerEvent creates a new scheduler event.
+func NewSchedulerEvent(name string, after time.Duration, weights map[string]int32, client SchedulerClient) *SchedulerEvent {
+	return &SchedulerEvent{
+		Name:         name,
+		ExecuteAfter: EventDuration(after),
+		Weights:      weights,
+		client:       client,
+	}
+}
 
+// SetClient sets the scheduler client.
+func (e *SchedulerEvent) SetClient(client SchedulerClient) {
+	e.client = client
+}
+
+// ID returns the event ID.
+func (e *SchedulerEvent) ID() string {
+	return e.Name
+}
+
+// ExecuteAfterDuration returns the duration to wait before execution.
 func (e *SchedulerEvent) ExecuteAfterDuration() time.Duration {
 	return time.Duration(e.ExecuteAfter)
 }
 
+// ExecuteForDuration returns 0 as scheduler events are instant.
 func (e *SchedulerEvent) ExecuteForDuration() time.Duration {
 	return 0
 }
 
+// ComparePriority compares this event with another for scheduling priority.
 func (e *SchedulerEvent) ComparePriority(other scheduler.Schedulable) bool {
 	return e.ExecuteAfterDuration() < other.ExecuteAfterDuration()
 }
 
+// Execute applies the scheduler configuration changes.
 func (e *SchedulerEvent) Execute(ctx context.Context) error {
-	logrus.Infof("executing scheduler event %s", e.Name)
-	logrus.Debugf("schedulerSim url: %s", schedulerSimUrl)
-	if e.httpClient == nil {
-		e.httpClient = &http.Client{}
+	log := logger.WithContext(ctx).WithFields(map[string]interface{}{
+		"event_type": "scheduler_config",
+		"event":      e.Name,
+		"weights":    e.Weights,
+	})
+
+	log.Info("executing scheduler event")
+
+	if e.client == nil {
+		return errors.WrapSchedulerError("execute", e.Name, fmt.Errorf("scheduler client not configured"))
 	}
-	for {
-		select {
-		case <-ctx.Done():
-			return errors.New("cannot wait scheduler event finish, context cancelled")
-		default:
-			if currentConfig, err := e.GetCurrentSchedulerConfig(); err != nil {
-				return err
-			} else {
-				if err = e.UpdateSchedulerConfig(currentConfig); err != nil {
-					return err
-				}
-				return nil
-			}
-		}
+
+	// Get current configuration.
+	currentConfig, err := e.client.GetConfig(ctx)
+	if err != nil {
+		return errors.WrapSchedulerError("get-config", e.Name, err)
 	}
+
+	// Apply weight changes.
+	matched := e.applyWeights(currentConfig)
+	if len(matched) == 0 {
+		log.Warn("no matching plugins found in scheduler config")
+	} else {
+		log.WithFields(map[string]interface{}{
+			"plugins": matched,
+		}).Debug("updated plugin weights")
+	}
+
+	// Update configuration.
+	if err := e.client.UpdateConfig(ctx, currentConfig); err != nil {
+		return errors.WrapSchedulerError("update-config", e.Name, err)
+	}
+
+	log.Info("scheduler event completed successfully")
+
+	return nil
 }
 
-func (e *SchedulerEvent) GetCurrentSchedulerConfig() (*kubescheduler.KubeSchedulerConfiguration, error) {
-	req, err := http.NewRequest(http.MethodGet, schedulerSimUrl, nil)
-	if err != nil {
-		return nil, err
+// applyWeights applies the weight changes to the configuration.
+func (e *SchedulerEvent) applyWeights(config *kubescheduler.KubeSchedulerConfiguration) []string {
+	if len(config.Profiles) == 0 {
+		return nil
 	}
-	resp, err := e.httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("failed to get eventScheduler config: %s", resp.Status)
-	}
-	data, err := io.ReadAll(resp.Body)
-	var config kubescheduler.KubeSchedulerConfiguration
-	// unmarshal response body to config
-	if err = json.Unmarshal(data, &config); err != nil {
-		return nil, errors.New("failed to unmarshal scheduler config")
-	}
-	return &config, nil
-}
 
-func (e *SchedulerEvent) UpdateSchedulerConfig(config *kubescheduler.KubeSchedulerConfiguration) error {
 	matched := []string{}
+	profile := &config.Profiles[0]
+
+	if profile.Plugins == nil {
+		return nil
+	}
+
+	if profile.Plugins.MultiPoint.Enabled == nil {
+		return nil
+	}
+
 	for name, weight := range e.Weights {
-		for i, plugin := range config.Profiles[0].Plugins.MultiPoint.Enabled {
+		for i, plugin := range profile.Plugins.MultiPoint.Enabled {
 			if plugin.Name == name {
 				matched = append(matched, name)
-				config.Profiles[0].Plugins.MultiPoint.Enabled[i].Weight = &weight
+				weightCopy := weight
+				profile.Plugins.MultiPoint.Enabled[i].Weight = &weightCopy
+
+				break
 			}
 		}
 	}
-	if len(matched) == 0 {
-		logrus.Warnf("no matched plugin found in scheduler config, please check the plugin name")
-	}
-	// marshal config to json
-	data, err := json.Marshal(config)
-	if err != nil {
-		return errors.New("failed to marshal scheduler config")
-	}
-	req, err := http.NewRequest(http.MethodPost, schedulerSimUrl, io.NopCloser(bytes.NewReader(data)))
-	req.Header.Set("Content-Type", "application/json")
-	if err != nil {
-		return err
-	}
-	resp, err := e.httpClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusAccepted {
-		return fmt.Errorf("failed to update eventScheduler config: %s", resp.Status)
-	}
-	return nil
+
+	return matched
 }

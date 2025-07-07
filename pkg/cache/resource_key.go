@@ -12,16 +12,20 @@ type Key struct {
 	Name string
 }
 
+// NewKey creates a new Key from a metav1.Object.
 func NewKey(obj metav1.Object) Key {
 	return Key{
 		UID:  obj.GetUID(),
 		Name: obj.GetName(),
 	}
 }
+
+// GetUID returns the UID of the Key as a string.
 func (pk Key) GetUID() string {
 	return string(pk.UID)
 }
 
+// GetName returns the name of the Key.
 func (pk Key) GetName() string {
 	return pk.Name
 }

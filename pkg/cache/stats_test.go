@@ -1,17 +1,17 @@
 package cache
 
 import (
+	"testing"
+
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"testing"
 )
 
 var (
 	nodeCpu    = resource.MustParse("1")
 	nodeMemory = resource.MustParse("1Gi")
-	nodePods   = resource.MustParse("110")
 
 	pod1Cpu    = resource.MustParse("100m")
 	pod1Memory = resource.MustParse("200Mi")
@@ -82,6 +82,7 @@ func TestClusterStats_RegisterAllocatedResourceSample(t *testing.T) {
 	record := stats.AllocationHistory[key][0]
 	expectedCpu := pod1Cpu.DeepCopy()
 	expectedCpu.Add(pod2Cpu)
+
 	expectedMemory := pod1Memory.DeepCopy()
 	expectedMemory.Add(pod2Memory)
 

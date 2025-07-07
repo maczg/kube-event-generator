@@ -7,8 +7,8 @@ import (
 
 // Queue is a type that implements heap.Interface and holds items of Schedulable type.
 type Queue[T Schedulable] struct {
-	mu    sync.Mutex
 	items []T
+	mu    sync.Mutex
 }
 
 // NewQueue creates a new Queue.
@@ -18,6 +18,7 @@ func NewQueue[T Schedulable]() *Queue[T] {
 		items: []T{},
 	}
 	heap.Init(g)
+
 	return g
 }
 
@@ -25,9 +26,11 @@ func NewQueue[T Schedulable]() *Queue[T] {
 func (q *Queue[T]) Peek() *T {
 	q.mu.Lock()
 	defer q.mu.Unlock()
+
 	if len(q.items) == 0 {
 		return nil
 	}
+
 	return &q.items[0]
 }
 
@@ -35,6 +38,7 @@ func (q *Queue[T]) Peek() *T {
 func (q *Queue[T]) Len() int {
 	q.mu.Lock()
 	defer q.mu.Unlock()
+
 	return len(q.items)
 }
 
@@ -42,6 +46,7 @@ func (q *Queue[T]) Len() int {
 func (q *Queue[T]) Less(i, j int) bool {
 	q.mu.Lock()
 	defer q.mu.Unlock()
+
 	return q.items[i].ComparePriority(q.items[j])
 }
 
@@ -67,5 +72,6 @@ func (q *Queue[T]) Pop() any {
 	n := len(old)
 	item := old[n-1]
 	q.items = old[0 : n-1]
+
 	return item
 }

@@ -1,6 +1,14 @@
 package scheduler
 
-import "errors"
+import (
+	"github.com/maczg/kube-event-generator/pkg/errors"
+)
 
-var ErrAlreadyRunning = errors.New("scheduler already running")
-var ErrNotRunning = errors.New("scheduler not running")
+// Deprecated: Use errors.ErrSchedulerAlreadyRunning instead.
+var ErrAlreadyRunning = errors.ErrSchedulerAlreadyRunning
+
+// Deprecated: Use errors.ErrSchedulerNotRunning instead.
+var ErrNotRunning = errors.ErrSchedulerNotRunning
+
+// Deprecated: Use errors.ErrSchedulerStopped instead.
+var ErrStopped = errors.ErrSchedulerStopped

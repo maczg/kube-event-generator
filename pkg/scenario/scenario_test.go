@@ -1,10 +1,11 @@
 package scenario
 
 import (
-	"github.com/ghodss/yaml"
-	"github.com/stretchr/testify/assert"
 	"testing"
 	"time"
+
+	"github.com/ghodss/yaml"
+	"github.com/stretchr/testify/assert"
 )
 
 var testScenario = []byte(`

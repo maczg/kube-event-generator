@@ -1,20 +1,23 @@
+// Package cache provides a cache for nodes and pods in a Kubernetes cluster.
 package cache
 
 import (
+	"sort"
+	"strings"
+	"sync"
+	"time"
+
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	cc "k8s.io/client-go/tools/cache"
-	"sort"
-	"strings"
-	"sync"
-	"time"
 )
 
+// Store is a cache for nodes and pods in the cluster.
 type Store struct {
 	mu *sync.RWMutex
-	//log       logger.Logger
+	// log       logger.Logger
 	clientset *kubernetes.Clientset
 	// nodesInfo is a map of node name to nodeInfo
 	nodesInfo map[string]*NodeStore
@@ -32,6 +35,7 @@ func NewStore(clientset *kubernetes.Clientset) *Store {
 		stats:     NewStats(),
 		stopCh:    make(chan struct{}),
 	}
+
 	return ni
 }
 
@@ -39,6 +43,7 @@ func NewStore(clientset *kubernetes.Clientset) *Store {
 // Returns immediately after starting the informers.
 func (s *Store) Start() {
 	logrus.Infoln("starting store")
+
 	factory := informers.NewSharedInformerFactory(s.clientset, 0)
 	nodeInformer := factory.Core().V1().Nodes().Informer()
 	podInformer := factory.Core().V1().Pods().Informer()
@@ -57,16 +62,21 @@ func (s *Store) Start() {
 	factory.Start(s.stopCh)
 }
 
+// Stop stops the store and updates the history with the current state of nodes.
 func (s *Store) Stop() {
 	logrus.Infoln("stopping")
+
 	for _, nodeInfo := range s.nodesInfo {
 		s.stats.UpdateHistory(nodeInfo.Copy())
 	}
+
 	close(s.stopCh)
 }
 
+// onAddNode is called when a new node is added to the cluster.
 func (s *Store) onAddNode(obj interface{}) {
 	node := obj.(*v1.Node)
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -79,8 +89,10 @@ func (s *Store) onAddNode(obj interface{}) {
 
 func (s *Store) onUpdateNode(oldObj, newObj interface{}) {
 	newNode := newObj.(*v1.Node)
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	if n, exists := s.nodesInfo[newNode.Name]; exists {
 		n.UpdateNodeSpec(newNode)
 		s.stats.UpdateHistory(n.Copy())
@@ -93,6 +105,7 @@ func (s *Store) onUpdateNode(oldObj, newObj interface{}) {
 
 func (s *Store) onDeleteNode(obj interface{}) {
 	node := obj.(*v1.Node)
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.nodesInfo, node.Name)
@@ -100,6 +113,7 @@ func (s *Store) onDeleteNode(obj interface{}) {
 
 func (s *Store) addPod(obj interface{}) {
 	pod := obj.(*v1.Pod)
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -109,8 +123,10 @@ func (s *Store) addPod(obj interface{}) {
 		logrus.Debugf("[onAdd] pod %s added to pending queue", pod.Name)
 		s.stats.UpdatePendingQ(pod, AddPodToPendingQ)
 	}
+
 	if nodeName := pod.Spec.NodeName; nodeName != "" {
 		logrus.Debugf("[onAdd] pod %s added to node %s", pod.Name, nodeName)
+
 		if nodeInfo, ok := s.nodesInfo[nodeName]; ok {
 			nodeInfo.addPod(pod)
 			s.stats.UpdateHistory(nodeInfo.Copy())
@@ -141,6 +157,7 @@ func (s *Store) updatePod(oldObj, newObj interface{}) {
 		if oldPodNodeName == "" && newPodNodeName != "" {
 			logrus.Debugf("[onUpdate] %s is now on %s, removing from pending queue", oldPod.Name, newPodNodeName)
 			s.stats.UpdatePendingQ(oldPod, RemovePodFromPendingQ)
+
 			if nodeInfo, ok := s.nodesInfo[newPodNodeName]; ok {
 				nodeInfo.addPod(newPod)
 				s.stats.UpdateHistory(nodeInfo.Copy())
@@ -152,6 +169,7 @@ func (s *Store) updatePod(oldObj, newObj interface{}) {
 				nodeInfo.deletePod(oldPod)
 				s.stats.UpdateHistory(nodeInfo.Copy())
 			}
+
 			if nodeInfo, ok := s.nodesInfo[newPodNodeName]; ok {
 				nodeInfo.addPod(newPod)
 				s.stats.UpdateHistory(nodeInfo.Copy())
@@ -184,6 +202,7 @@ func (s *Store) deletePod(obj interface{}) {
 	switch pod.Status.Phase {
 	case v1.PodRunning:
 		logrus.Debugf("[onDelete] running pod %s delete", pod.Name)
+
 		if nodeName := pod.Spec.NodeName; nodeName != "" {
 			s.stats.RunningDurations[key] = time.Since(pod.GetCreationTimestamp().Time)
 			if nodeInfo, ok := s.nodesInfo[nodeName]; ok {
@@ -195,6 +214,7 @@ func (s *Store) deletePod(obj interface{}) {
 		// pod was in pending queue, remove from pending queue
 		logrus.Debugf("[onDelete] pending pod %s delete", pod.Name)
 		s.stats.UpdatePendingQ(pod, RemovePodFromPendingQ)
+
 		if nodeName := pod.Spec.NodeName; nodeName != "" {
 			if nodeInfo, ok := s.nodesInfo[nodeName]; ok {
 				nodeInfo.deletePod(pod)
@@ -212,15 +232,19 @@ func (s *Store) deletePod(obj interface{}) {
 func (s *Store) GetStats() Stats {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+
 	return *s.stats
 }
 
+// GetNodeInfo returns the NodeStore for the given node name.
 func (s *Store) GetNodeInfo(nodeName string) NodeStore {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+
 	return *s.nodesInfo[nodeName]
 }
 
+// GetNodesInfo returns a sorted slice of NodeStore for all nodes in the cluster.
 func (s *Store) GetNodesInfo() []NodeStore {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -229,9 +253,11 @@ func (s *Store) GetNodesInfo() []NodeStore {
 	for _, nodeStatus := range s.nodesInfo {
 		status = append(status, *nodeStatus)
 	}
+
 	sort.Slice(status, func(i, j int) bool {
 		return status[i].Node.Name < status[j].Node.Name
 	})
+
 	return status
 }
 
@@ -241,16 +267,20 @@ func (s *Store) GetNodesInfo() []NodeStore {
 // It blocks until the stop channel is closed.
 func (s *Store) WatchEvery(seconds int) {
 	logrus.Infof("logging every %d seconds", seconds)
+
 	ticker := time.NewTicker(time.Duration(seconds) * time.Second)
 	defer ticker.Stop()
+
 	for {
 		select {
 		case <-ticker.C:
 			s.mu.RLock()
+
 			status := make([]NodeStore, 0, len(s.nodesInfo))
 			for _, nodeStatus := range s.nodesInfo {
 				status = append(status, *nodeStatus)
 			}
+
 			sort.Slice(status, func(i, j int) bool {
 				return status[i].Node.Name < status[j].Node.Name
 			})
@@ -259,6 +289,7 @@ func (s *Store) WatchEvery(seconds int) {
 			for _, ns := range status {
 				statusbuilder.WriteString(ns.String())
 			}
+
 			logrus.Infoln(statusbuilder.String())
 			s.mu.RUnlock()
 		case <-s.stopCh:

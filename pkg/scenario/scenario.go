@@ -4,21 +4,22 @@ import (
 	"cmp"
 	"context"
 	"fmt"
-	"github.com/ghodss/yaml"
-	"github.com/google/uuid"
-	"github.com/sirupsen/logrus"
-	"k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
 	"os"
 	"slices"
 	"time"
+
+	"github.com/ghodss/yaml"
+	"github.com/google/uuid"
+	"github.com/sirupsen/logrus"
+	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 )
 
 type Scenario struct {
-	Metadata Metadata `yaml:"metadata" json:"metadata"`
 	Cluster  *Cluster `yaml:"cluster" json:"cluster"`
 	Events   *Events  `yaml:"events" json:"events"`
+	Metadata Metadata `yaml:"metadata" json:"metadata"`
 }
 
 func (s *Scenario) Describe() {
@@ -29,6 +30,7 @@ func (s *Scenario) Describe() {
 	} else {
 		logrus.Warn("cluster is not set")
 	}
+
 	if s.Events.SchedulerConfigs != nil {
 		for _, event := range s.Events.SchedulerConfigs {
 			logrus.Infof("scheduler config %s [from: %s]", event.ID(), event.ExecuteAfterDuration().String())
@@ -36,13 +38,17 @@ func (s *Scenario) Describe() {
 	} else {
 		logrus.Warn("scheduler config is not set")
 	}
+
 	if s.Events.Pods != nil {
 		longest := s.Events.GetLongestEvent()
 		biggestCpu := s.Events.GetLargerCpuRequest()
 		biggestMem := s.Events.GetLargerMemRequest()
+
 		logrus.Infof("longest pod event %s [from: %s]", longest.Name, longest.ExecuteAfterDuration().String())
+
 		cpuMax := biggestCpu.Pod.Spec.Containers[0].Resources.Requests[v1.ResourceCPU]
 		memMax := biggestMem.Pod.Spec.Containers[0].Resources.Requests[v1.ResourceMemory]
+
 		logrus.Infof("biggest event by cpu %s [cpu: %s]", biggestCpu.Name, cpuMax.String())
 		logrus.Infof("biggest event by mem %s [mem: %s]", biggestMem.Name, memMax.String())
 	}
@@ -50,10 +56,12 @@ func (s *Scenario) Describe() {
 
 func Load(data []byte) (*Scenario, error) {
 	var s Scenario
+
 	err := yaml.Unmarshal(data, &s)
 	if err != nil {
 		return nil, err
 	}
+
 	return &s, nil
 }
 
@@ -62,6 +70,7 @@ func LoadFromYaml(filename string) (*Scenario, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	return Load(data)
 }
 
@@ -93,10 +102,12 @@ func NewScenario(opts ...Opt) *Scenario {
 	for _, opt := range opts {
 		opt(s)
 	}
+
 	if s.Metadata.Name == "" {
 		s.Metadata.Name = fmt.Sprintf("default-%s", uuid.New().String()[0:3])
 		s.Metadata.CreatedAt = time.Now()
 	}
+
 	return s
 }
 
@@ -105,18 +116,22 @@ func (s *Scenario) ToYaml(filename string) error {
 	if err != nil {
 		return err
 	}
+
 	defer file.Close()
+
 	data, err := yaml.Marshal(s)
 	if err != nil {
 		return err
 	}
+
 	_, err = file.Write(data)
+
 	return err
 }
 
 type Metadata struct {
-	Name      string    `yaml:"name" json:"name"`
 	CreatedAt time.Time `yaml:"createdAt" json:"createdAt"`
+	Name      string    `yaml:"name" json:"name"`
 }
 
 // Cluster represents the cluster configuration.
@@ -131,6 +146,7 @@ func (c *Cluster) Create(clientset *kubernetes.Clientset) error {
 			return fmt.Errorf("failed to create node %s: %v", node.Name, err)
 		}
 	}
+
 	return nil
 }
 
@@ -149,11 +165,14 @@ func (e *Events) GetLargerCpuRequest() *PodEvent {
 	if len(e.Pods) == 0 {
 		return nil
 	}
+
 	largest := slices.MaxFunc(e.Pods, func(a, b *PodEvent) int {
 		cpuA := a.Pod.Spec.Containers[0].Resources.Requests[v1.ResourceCPU]
 		cpuB := b.Pod.Spec.Containers[0].Resources.Requests[v1.ResourceCPU]
+
 		return cmp.Compare(cpuA.Value(), cpuB.Value())
 	})
+
 	return largest
 }
 
@@ -161,11 +180,14 @@ func (e *Events) GetLargerMemRequest() *PodEvent {
 	if len(e.Pods) == 0 {
 		return nil
 	}
+
 	largest := slices.MaxFunc(e.Pods, func(a, b *PodEvent) int {
 		memA := a.Pod.Spec.Containers[0].Resources.Requests[v1.ResourceMemory]
 		memB := b.Pod.Spec.Containers[0].Resources.Requests[v1.ResourceMemory]
+
 		return cmp.Compare(memA.Value(), memB.Value())
 	})
+
 	return largest
 }
 
@@ -173,9 +195,11 @@ func (e *Events) GetLongestEvent() *PodEvent {
 	if len(e.Pods) == 0 {
 		return nil
 	}
+
 	longest := slices.MaxFunc(e.Pods, func(a, b *PodEvent) int {
 		return cmp.Compare(a.ExecuteAfterDuration(), b.ExecuteAfterDuration())
 	})
+
 	return longest
 }
 

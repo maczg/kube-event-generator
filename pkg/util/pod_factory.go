@@ -42,11 +42,13 @@ func PodWithNodeAffinity(requiredLabel map[string]string, softLabels map[string]
 	return func(obj KubernetesObjectAdapter) {
 		if innerPod, ok := obj.(*pod); ok {
 			var requiredTerms []v1.NodeSelectorRequirement
+
 			var preferredTerms []v1.PreferredSchedulingTerm
 
 			affinity := &v1.Affinity{
 				NodeAffinity: &v1.NodeAffinity{},
 			}
+
 			if requiredLabel != nil {
 				for key, val := range requiredLabel {
 					requiredTerms = append(requiredTerms, v1.NodeSelectorRequirement{
@@ -55,6 +57,7 @@ func PodWithNodeAffinity(requiredLabel map[string]string, softLabels map[string]
 						Values:   []string{val},
 					})
 				}
+
 				affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution = &v1.NodeSelector{
 					NodeSelectorTerms: []v1.NodeSelectorTerm{
 						{
@@ -80,8 +83,10 @@ func PodWithNodeAffinity(requiredLabel map[string]string, softLabels map[string]
 						},
 					})
 				}
+
 				affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution = preferredTerms
 			}
+
 			innerPod.Spec.Affinity = affinity
 		}
 	}
@@ -93,5 +98,6 @@ func (p *podFactory) NewPod(opts ...KubernetesObjectOpt) *v1.Pod {
 	for _, opt := range opts {
 		opt(newPod)
 	}
+
 	return (*v1.Pod)(newPod)
 }

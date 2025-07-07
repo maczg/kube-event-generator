@@ -1,10 +1,11 @@
 package cache
 
 import (
+	"testing"
+
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"testing"
 )
 
 var pod1Resource = v1.ResourceList{
@@ -76,20 +77,21 @@ func TestNodeStatus_Update(t *testing.T) {
 	expectedCPU := resource.MustParse("300m")
 	expectedMemory := resource.MustParse("500Mi")
 
-	allocatedCpu := nodeStatus.GetAllocated()[v1.ResourceCPU]
+	allocatedCPU := nodeStatus.GetAllocated()[v1.ResourceCPU]
 	allocatedMemory := nodeStatus.GetAllocated()[v1.ResourceMemory]
 
-	if allocatedCpu.Cmp(expectedCPU) != 0 {
+	if allocatedCPU.Cmp(expectedCPU) != 0 {
 		t.Errorf("expected CPU %s, but got %s", expectedCPU.String(), nodeStatus.Allocated.Cpu().String())
 	}
+
 	if allocatedMemory.Cmp(expectedMemory) != 0 {
 		t.Errorf("expected Memory %s, but got %s", expectedMemory.String(), nodeStatus.Allocated.Memory().String())
 	}
 
-	nodeCpuCapacity := nodeStatus.Allocatable[v1.ResourceCPU]
+	nodeCPUCapacity := nodeStatus.Allocatable[v1.ResourceCPU]
 	nodeMemoryCapacity := nodeStatus.Allocatable[v1.ResourceMemory]
 
-	expectedCPURatio := float64(expectedCPU.Value()) / float64(nodeCpuCapacity.Value())
+	expectedCPURatio := float64(expectedCPU.Value()) / float64(nodeCPUCapacity.Value())
 	expectedMemoryRatio := float64(expectedMemory.Value()) / float64(nodeMemoryCapacity.Value())
 
 	ratio := nodeStatus.GetAllocatedRatio()
@@ -100,5 +102,4 @@ func TestNodeStatus_Update(t *testing.T) {
 	if ratio[v1.ResourceMemory] != expectedMemoryRatio {
 		t.Errorf("expected Memory ratio %f, but got %f", expectedMemoryRatio, ratio[v1.ResourceMemory])
 	}
-
 }

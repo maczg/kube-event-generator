@@ -1,7 +1,0 @@
-pod_uid,pod_name,running_time_milliseconds
-b7908d5a-b2c1-4a03-98ee-2d585cef7cac,memory-intensive-1,120785
-c7606134-50a4-463c-b938-4447ba2475cc,memory-intensive-2,120686
-61f08664-0dfe-4a6d-aa5c-2819002beb4c,mixed-workload-1,120737
-095414b4-8857-4fe8-a107-a33d5379d018,mixed-workload-2,120695
-5709c393-54fe-438d-90ac-84f4faccc0c9,cpu-intensive-1,120837
-6b4ff343-1656-4eb4-b5a5-7a20483cfd47,cpu-intensive-2,120704

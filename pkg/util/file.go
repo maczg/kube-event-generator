@@ -11,5 +11,6 @@ func CreateDir(dirName string) error {
 			return fmt.Errorf("failed to create directory %s: %v", dirName, err)
 		}
 	}
+
 	return nil
 }
