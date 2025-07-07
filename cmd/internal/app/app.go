@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/maczg/kube-event-generator/cmd/internal/analyze"
 	"github.com/maczg/kube-event-generator/cmd/internal/cluster"
 	"github.com/maczg/kube-event-generator/cmd/internal/scenario"
 	"github.com/maczg/kube-event-generator/cmd/internal/simulation"
@@ -63,6 +64,7 @@ It allows you to define scenarios, generate workloads, and analyze scheduler beh
 		cluster.NewCommand(app.logger),
 		simulation.NewCommand(app.logger),
 		scenario.NewCommand(app.logger),
+		analyze.NewCommand(app.logger),
 		app.versionCommand(),
 		app.completionCommand(),
 	)
