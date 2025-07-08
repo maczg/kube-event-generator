@@ -52,6 +52,11 @@ services:
     ports:
       - "3000:3000"
     tty: true
+    depends_on:
+      - simulator-server
+      - simulator-cluster
+    networks:
+      - simulator-internal-network
   simulator-cluster:
     image: registry.k8s.io/kwok/cluster:v0.6.0-k8s.v1.30.2
     container_name: simulator-cluster

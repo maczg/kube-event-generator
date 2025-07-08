@@ -313,7 +313,9 @@ class ExperimentRunner:
                 logger.warning("Failed to reset scheduler config, continuing anyway")
             
             # Step 3: For KWOK environments, recreate nodes from scenario
-            if self.is_kwok_environment():
+            is_kwok = self.is_kwok_environment()
+            logger.info(f"KWOK environment check: {is_kwok}")
+            if is_kwok:
                 logger.info("KWOK environment detected, recreating nodes from scenario...")
                 
                 # Delete all existing nodes
@@ -433,6 +435,13 @@ class ExperimentRunner:
     def is_kwok_environment(self) -> bool:
         """Check if running in KWOK environment."""
         try:
+            # Check if API server is running on port 3131 (KWOK default)
+            cmd = ["kubectl", "config", "view", "-o", "jsonpath={.clusters[*].cluster.server}"]
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+            
+            if result.returncode == 0 and "3131" in result.stdout:
+                return True
+                
             # Check if any node has kwok provider label
             cmd = ["kubectl", "get", "nodes", "-o", "jsonpath={.items[*].metadata.labels.type}"]
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
