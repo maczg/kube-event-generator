@@ -34,6 +34,19 @@ type GenerationConfig struct {
 	PodMemShape         float64                `mapstructure:"podMemShape"`
 	PodMemFactor        float64                `mapstructure:"podMemFactor"`
 	ArrivalScale        float64                `mapstructure:"arrivalScale"`
+	
+	// Cluster generation parameters
+	Cluster ClusterConfig `mapstructure:"cluster"`
+}
+
+// ClusterConfig represents cluster configuration parameters.
+type ClusterConfig struct {
+	Generate    bool    `mapstructure:"generate"`
+	NumNodes    int     `mapstructure:"numNodes"`
+	CpuPerNode  int64   `mapstructure:"cpuPerNode"`
+	MemoryPerNode int64 `mapstructure:"memoryPerNode"`
+	PodsPerNode int64   `mapstructure:"podsPerNode"`
+	Zones       []string `mapstructure:"zones"`
 }
 
 // SchedulerEventConfig represents a scheduler event configuration.
@@ -62,6 +75,14 @@ func DefaultConfig() Config {
 			PodMemScale:         2.0,
 			PodMemShape:         512.0,
 			PodMemFactor:        1.0,
+			Cluster: ClusterConfig{
+				Generate:      true,
+				NumNodes:      3,
+				CpuPerNode:    2,
+				MemoryPerNode: 4,
+				PodsPerNode:   50,
+				Zones:         []string{"zone-a", "zone-b", "zone-c"},
+			},
 		},
 	}
 }
@@ -156,6 +177,25 @@ func (c *Config) Validate() error {
 
 	if c.Generation.PodMemShape <= 0 {
 		return fmt.Errorf("pod memory shape must be positive")
+	}
+
+	// Validate cluster configuration
+	if c.Generation.Cluster.Generate {
+		if c.Generation.Cluster.NumNodes <= 0 {
+			return fmt.Errorf("number of nodes must be positive when cluster generation is enabled")
+		}
+		if c.Generation.Cluster.CpuPerNode <= 0 {
+			return fmt.Errorf("CPU per node must be positive when cluster generation is enabled")
+		}
+		if c.Generation.Cluster.MemoryPerNode <= 0 {
+			return fmt.Errorf("memory per node must be positive when cluster generation is enabled")
+		}
+		if c.Generation.Cluster.PodsPerNode <= 0 {
+			return fmt.Errorf("pods per node must be positive when cluster generation is enabled")
+		}
+		if len(c.Generation.Cluster.Zones) == 0 {
+			return fmt.Errorf("at least one zone must be specified when cluster generation is enabled")
+		}
 	}
 
 	return nil

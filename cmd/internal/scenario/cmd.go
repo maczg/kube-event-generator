@@ -11,6 +11,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 
+	"github.com/maczg/kube-event-generator/pkg/builder"
 	"github.com/maczg/kube-event-generator/pkg/distribution"
 	"github.com/maczg/kube-event-generator/pkg/logger"
 	"github.com/maczg/kube-event-generator/pkg/scenario"
@@ -144,6 +145,15 @@ func runGenerate(opts *Options, log *logger.Logger) error {
 		scn.Events.SchedulerConfigs = schedulerEvents
 	}
 
+	// Generate cluster nodes if configured.
+	if cfg.Generation.Cluster.Generate {
+		cluster, err := generateCluster(cfg, log)
+		if err != nil {
+			return fmt.Errorf("failed to generate cluster: %w", err)
+		}
+		scn.Cluster = cluster
+	}
+
 	// Display scenario summary.
 	displayScenarioSummary(scn, log)
 
@@ -265,6 +275,59 @@ func generateSchedulerEvents(cfg Config, log *logger.Logger) []*scenario.Schedul
 	return events
 }
 
+// generateCluster generates cluster nodes based on configuration.
+func generateCluster(cfg Config, log *logger.Logger) (*scenario.Cluster, error) {
+	cluster := scenario.NewCluster()
+	
+	// Calculate allocatable resources (95% of capacity for CPU, 87.5% for memory)
+	allocatableCpu := int64(float64(cfg.Generation.Cluster.CpuPerNode) * 0.95)
+	allocatableMemory := int64(float64(cfg.Generation.Cluster.MemoryPerNode) * 0.875)
+	
+	for i := 0; i < cfg.Generation.Cluster.NumNodes; i++ {
+		nodeName := fmt.Sprintf("node-%d", i+1)
+		
+		// Select zone cyclically
+		zone := cfg.Generation.Cluster.Zones[i%len(cfg.Generation.Cluster.Zones)]
+		
+		// Create node labels
+		labels := map[string]string{
+			"kubernetes.io/hostname":              nodeName,
+			"node.kubernetes.io/instance-type":    "standard",
+			"topology.kubernetes.io/zone":         zone,
+			"type":                               "kwok",
+		}
+		
+		// Build node using NodeBuilder
+		nodeBuilder := builder.NewNodeBuilder(nodeName).
+			WithCapacity(cfg.Generation.Cluster.CpuPerNode, cfg.Generation.Cluster.MemoryPerNode, cfg.Generation.Cluster.PodsPerNode).
+			WithAllocatable(allocatableCpu, allocatableMemory, cfg.Generation.Cluster.PodsPerNode).
+			WithLabels(labels)
+		
+		node, err := nodeBuilder.Build()
+		if err != nil {
+			return nil, fmt.Errorf("failed to build node %s: %w", nodeName, err)
+		}
+		
+		cluster.Nodes = append(cluster.Nodes, node)
+		
+		log.WithFields(map[string]interface{}{
+			"node":   nodeName,
+			"zone":   zone,
+			"cpu":    cfg.Generation.Cluster.CpuPerNode,
+			"memory": cfg.Generation.Cluster.MemoryPerNode,
+			"pods":   cfg.Generation.Cluster.PodsPerNode,
+		}).Debug("Generated cluster node")
+	}
+	
+	log.WithFields(map[string]interface{}{
+		"nodes": len(cluster.Nodes),
+		"total_cpu": cfg.Generation.Cluster.CpuPerNode * int64(cfg.Generation.Cluster.NumNodes),
+		"total_memory": cfg.Generation.Cluster.MemoryPerNode * int64(cfg.Generation.Cluster.NumNodes),
+	}).Info("Generated cluster")
+	
+	return cluster, nil
+}
+
 // displayScenarioSummary displays a summary of the generated scenario.
 func displayScenarioSummary(scn *scenario.Scenario, log *logger.Logger) {
 	fmt.Printf("\nScenario Summary:\n")
@@ -273,6 +336,43 @@ func displayScenarioSummary(scn *scenario.Scenario, log *logger.Logger) {
 	fmt.Printf("Created: %s\n", scn.Metadata.CreatedAt.Format(time.RFC3339))
 	fmt.Printf("Pod Events: %d\n", len(scn.Events.Pods))
 	fmt.Printf("Scheduler Events: %d\n", len(scn.Events.SchedulerConfigs))
+	
+	// Display cluster summary
+	if scn.Cluster != nil && len(scn.Cluster.Nodes) > 0 {
+		fmt.Printf("Cluster Nodes: %d\n", len(scn.Cluster.Nodes))
+		
+		// Calculate total cluster resources
+		var totalCPU, totalMemory, totalPods int64
+		zones := make(map[string]int)
+		
+		for _, node := range scn.Cluster.Nodes {
+			if cpu, ok := node.Status.Capacity[v1.ResourceCPU]; ok {
+				totalCPU += cpu.Value()
+			}
+			if mem, ok := node.Status.Capacity[v1.ResourceMemory]; ok {
+				totalMemory += mem.Value()
+			}
+			if pods, ok := node.Status.Capacity[v1.ResourcePods]; ok {
+				totalPods += pods.Value()
+			}
+			
+			if zone, ok := node.Labels["topology.kubernetes.io/zone"]; ok {
+				zones[zone]++
+			}
+		}
+		
+		fmt.Printf("Total Cluster Capacity:\n")
+		fmt.Printf("  CPU: %.0f cores\n", float64(totalCPU))
+		fmt.Printf("  Memory: %.2f GB\n", float64(totalMemory)/(1024*1024*1024))
+		fmt.Printf("  Pods: %d\n", totalPods)
+		
+		if len(zones) > 0 {
+			fmt.Printf("Availability Zones:\n")
+			for zone, count := range zones {
+				fmt.Printf("  %s: %d nodes\n", zone, count)
+			}
+		}
+	}
 
 	if len(scn.Events.Pods) > 0 {
 		// Calculate statistics.

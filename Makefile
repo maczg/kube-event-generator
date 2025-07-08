@@ -23,7 +23,7 @@ YELLOW := \033[0;33m
 RED := \033[0;31m
 NC := \033[0m # No Color
 
-.PHONY: all build clean test test-unit test-integration test-coverage lint fmt vet deps docker-build docker-push help
+.PHONY: all build clean test test-unit test-integration test-coverage lint fmt vet deps docker-build docker-push help clean-exp
 
 # Default target
 all: clean deps lint test build
@@ -170,6 +170,12 @@ release: check
 	git tag -a $$VERSION -m "Release $$VERSION"; \
 	git push origin $$VERSION; \
 	echo "$(GREEN)Release $$VERSION created$(NC)"
+
+# clean experiments
+clean-exp:
+	@echo "$(YELLOW)Cleaning experiments...$(NC)"
+	@rm -rf scenarios/workload* experiments/config*
+	@echo "$(GREEN)Experiments cleaned$(NC)"
 
 # Show help
 help:

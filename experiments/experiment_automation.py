@@ -30,6 +30,9 @@ class ExperimentRunner:
         os.makedirs(self.base_dir, exist_ok=True)
         os.makedirs(self.experiment_results_dir, exist_ok=True)
         
+        # Scheduler simulator URL
+        self.scheduler_simulator_url = os.getenv("SCHEDULER_SIM_URL", "http://localhost:1212/api/v1/schedulerconfiguration")
+        
         # Define experiment parameters
         self.seeds = list(range(1, 11))  # 10 seeds
         self.weight_configs = self._define_weight_configs()
@@ -119,18 +122,40 @@ class ExperimentRunner:
         
         return vectors
     
-    def generate_config_file(self, param_vector: Dict, output_path: str):
-        """Generate a KEG configuration file for given parameters."""
+    def generate_config_file(self, param_vector: Dict, output_path: str, include_cluster: bool = True):
+        """Generate a KEG configuration file for given parameters.
+        
+        Args:
+            param_vector: Parameters for the scenario
+            output_path: Where to save the config file
+            include_cluster: Whether to include cluster spec in the config
+        """
+        # Create generation config with embedded cluster parameters
+        generation_config = param_vector.copy()
+        
+        # Add cluster configuration if requested
+        if include_cluster:
+            cluster_config = self.get_cluster_config_for_workload(param_vector)
+            generation_config["cluster"] = {
+                "generate": True,
+                "numNodes": cluster_config['num_nodes'],
+                "cpuPerNode": cluster_config['cpu_per_node'],
+                "memoryPerNode": cluster_config['memory_per_node'],
+                "podsPerNode": cluster_config['pods_per_node'],
+                "zones": ["zone-a", "zone-b", "zone-c"]
+            }
+            logger.info(f"Added cluster config: {cluster_config['num_nodes']} nodes with {cluster_config['cpu_per_node']} CPU each")
+        
         config = {
             "scenarioName": param_vector["name"],  # Top level, not inside scenario
             "outputDir": "scenarios",              # KEG uses this for output
-            "generation": param_vector,            # Generation params at top level
+            "generation": generation_config,       # Generation params with cluster config
             "kubernetes": {
                 "namespace": "default",
                 "requestTimeout": "30s"
             },
             "scheduler": {
-                "simulatorUrl": "http://localhost:1212/api/v1/schedulerconfiguration",
+                "simulatorUrl": self.scheduler_simulator_url,
                 "httpTimeout": "10s"
             },
             "output": {
@@ -143,96 +168,119 @@ class ExperimentRunner:
         with open(output_path, 'w') as f:
             yaml.dump(config, f, default_flow_style=False)
     
-    def generate_cluster_nodes(self) -> List[Dict]:
-        """Generate cluster node definitions for KWOK simulation."""
-        return [
-            {
+    def generate_cluster_nodes(self, num_nodes: int = 3, cpu_per_node: str = "2", 
+                              memory_per_node: str = "4Gi", pods_per_node: int = 50) -> List[Dict]:
+        """Generate cluster node definitions for KWOK simulation.
+        
+        Args:
+            num_nodes: Number of nodes to create
+            cpu_per_node: CPU capacity per node (e.g., "2", "4")
+            memory_per_node: Memory capacity per node (e.g., "4Gi", "8Gi")
+            pods_per_node: Maximum pods per node
+        """
+        nodes = []
+        zones = ["zone-a", "zone-b", "zone-c"]
+        
+        # Calculate allocatable resources (95% of capacity for CPU, 87.5% for memory)
+        cpu_value = float(cpu_per_node)
+        allocatable_cpu = f"{int(cpu_value * 950)}m"  # 95% of capacity in millicores
+        
+        memory_value = float(memory_per_node.replace('Gi', ''))
+        allocatable_memory = f"{memory_value * 0.875:.1f}Gi"  # 87.5% of capacity
+        
+        for i in range(num_nodes):
+            node_name = f"node-{i+1}"
+            zone = zones[i % len(zones)]  # Cycle through zones
+            
+            nodes.append({
                 "metadata": {
-                    "name": "node-1",
+                    "name": node_name,
                     "labels": {
-                        "kubernetes.io/hostname": "node-1",
+                        "kubernetes.io/hostname": node_name,
                         "node.kubernetes.io/instance-type": "standard",
-                        "topology.kubernetes.io/zone": "zone-a"
+                        "topology.kubernetes.io/zone": zone,
+                        "type": "kwok"  # Mark as KWOK node
                     }
                 },
                 "status": {
                     "capacity": {
-                        "cpu": "2",
-                        "memory": "4Gi",
-                        "pods": "50"
+                        "cpu": cpu_per_node,
+                        "memory": memory_per_node,
+                        "pods": str(pods_per_node)
                     },
                     "allocatable": {
-                        "cpu": "1900m",
-                        "memory": "3.5Gi",
-                        "pods": "50"
+                        "cpu": allocatable_cpu,
+                        "memory": allocatable_memory,
+                        "pods": str(pods_per_node)
                     }
                 }
-            },
-            {
-                "metadata": {
-                    "name": "node-2",
-                    "labels": {
-                        "kubernetes.io/hostname": "node-2",
-                        "node.kubernetes.io/instance-type": "standard",
-                        "topology.kubernetes.io/zone": "zone-b"
-                    }
-                },
-                "status": {
-                    "capacity": {
-                        "cpu": "2",
-                        "memory": "4Gi",
-                        "pods": "50"
-                    },
-                    "allocatable": {
-                        "cpu": "1900m",
-                        "memory": "3.5Gi",
-                        "pods": "50"
-                    }
-                }
-            },
-            {
-                "metadata": {
-                    "name": "node-3",
-                    "labels": {
-                        "kubernetes.io/hostname": "node-3",
-                        "node.kubernetes.io/instance-type": "standard",
-                        "topology.kubernetes.io/zone": "zone-c"
-                    }
-                },
-                "status": {
-                    "capacity": {
-                        "cpu": "2",
-                        "memory": "4Gi",
-                        "pods": "50"
-                    },
-                    "allocatable": {
-                        "cpu": "1900m",
-                        "memory": "3.5Gi",
-                        "pods": "50"
-                    }
-                }
-            }
-        ]
+            })
+        
+        return nodes
+    
+    def get_cluster_config_for_workload(self, param_vector: Dict) -> Dict:
+        """Generate appropriate cluster configuration based on workload parameters."""
+        # Extract workload characteristics
+        num_pods = param_vector.get('numPodEvents', 100)
+        
+        # For pod resources, we need to consider the distribution parameters
+        # The actual values will be generated from Weibull distribution
+        # We'll estimate based on scale factors
+        cpu_factor = param_vector.get('podCpuFactor', 0.1)  # in cores
+        mem_scale = param_vector.get('podMemScale', 100)  # in Mi
+        
+        # Estimate average resource per pod (considering distribution mean)
+        # For Weibull, mean ≈ scale * Γ(1 + 1/shape)
+        # Simplified: use scale * 1.5 as rough estimate
+        avg_cpu_per_pod = cpu_factor * 1.5
+        avg_memory_per_pod = (mem_scale * 1.5) / 1024.0  # Convert to Gi
+        
+        # Calculate total resources needed (with 50% headroom)
+        total_cpu_needed = num_pods * avg_cpu_per_pod * 1.5
+        total_memory_needed = num_pods * avg_memory_per_pod * 1.5
+        
+        # Determine node size and count
+        if total_cpu_needed <= 6:  # Small cluster
+            node_cpu = 2
+            node_memory = 4
+            num_nodes = 3
+        elif total_cpu_needed <= 12:  # Medium cluster
+            node_cpu = 4
+            node_memory = 8
+            num_nodes = 3
+        else:  # Large cluster
+            node_cpu = 4
+            node_memory = 8
+            num_nodes = max(3, min(10, int(total_cpu_needed / 4) + 1))
+        
+        # Ensure we have enough pod capacity
+        pods_per_node = max(50, int(num_pods / num_nodes * 1.5))
+        
+        return {
+            "num_nodes": num_nodes,
+            "cpu_per_node": node_cpu,
+            "memory_per_node": node_memory,
+            "pods_per_node": pods_per_node
+        }
 
     def generate_scenario_with_weights(self, base_scenario_path: str, weight_config: Dict, output_path: str):
-        """Modify a scenario to include scheduler weight change events and cluster nodes."""
+        """Modify a scenario to include scheduler weight change events."""
         with open(base_scenario_path, 'r') as f:
             scenario = yaml.safe_load(f)
 
-        # Add cluster nodes (replace null with actual nodes)
-        scenario['cluster'] = {
-            'nodes': self.generate_cluster_nodes()
-        }
+        # Don't modify cluster nodes - they should already be in the base scenario
+        # generated from the config file
 
         # Add scheduler event at the beginning
         if 'events' not in scenario:
             scenario['events'] = {}
         
-        if 'schedulerConfigs' not in scenario['events']:
-            scenario['events']['schedulerConfigs'] = []
+        # Check if scheduler key exists and is not null
+        if 'scheduler' not in scenario['events'] or scenario['events']['scheduler'] is None:
+            scenario['events']['scheduler'] = []
         
         # Insert weight change event at time 0
-        scenario['events']['schedulerConfigs'].insert(0, {
+        scenario['events']['scheduler'].insert(0, {
             'name': f'set_weights_{weight_config["name"]}',
             'after': '0s',
             'weights': weight_config['weights']
@@ -241,38 +289,256 @@ class ExperimentRunner:
         with open(output_path, 'w') as f:
             yaml.dump(scenario, f, default_flow_style=False)
     
-    def reset_cluster(self) -> bool:
-        """Reset and recreate the cluster before each experiment."""
+    def ensure_clean_cluster_state(self, scenario_path: str) -> bool:
+        """Ensure cluster is in a clean, consistent state before running experiment."""
         try:
-            logger.info("Resetting cluster...")
+            logger.info("Ensuring clean cluster state...")
             
-            # Reset KWOK cluster
-            reset_cmd = ["./bin/keg", "cluster", "reset"]
+            # Step 1: Delete all non-system pods
+            logger.info("Cleaning up existing pods...")
+            namespaces_cmd = ["kubectl", "get", "namespaces", "-o", "jsonpath={.items[*].metadata.name}"]
+            result = subprocess.run(namespaces_cmd, capture_output=True, text=True, timeout=30)
+            
+            if result.returncode == 0:
+                namespaces = result.stdout.strip().split()
+                system_namespaces = {"kube-system", "kube-public", "kube-node-lease", "local-path-storage"}
+                
+                for ns in namespaces:
+                    if ns not in system_namespaces:
+                        delete_cmd = ["kubectl", "delete", "pods", "--all", "-n", ns, "--force", "--grace-period=0"]
+                        subprocess.run(delete_cmd, capture_output=True, text=True, timeout=60)
+            
+            # Step 2: Reset scheduler configuration to default
+            if not self.reset_scheduler_config():
+                logger.warning("Failed to reset scheduler config, continuing anyway")
+            
+            # Step 3: For KWOK environments, recreate nodes from scenario
+            if self.is_kwok_environment():
+                logger.info("KWOK environment detected, recreating nodes from scenario...")
+                
+                # Delete all existing nodes
+                delete_nodes_cmd = ["kubectl", "delete", "nodes", "--all"]
+                subprocess.run(delete_nodes_cmd, capture_output=True, text=True, timeout=60)
+                time.sleep(5)
+                
+                # Load scenario to get node definitions
+                with open(scenario_path, 'r') as f:
+                    scenario = yaml.safe_load(f)
+                
+                if 'cluster' in scenario and scenario['cluster'] and 'nodes' in scenario['cluster']:
+                    nodes = scenario['cluster']['nodes']
+                    logger.info(f"Creating {len(nodes)} nodes from scenario")
+                    
+                    for node in nodes:
+                        # Create node manifest
+                        node_manifest = {
+                            "apiVersion": "v1",
+                            "kind": "Node",
+                            "metadata": node.get('metadata', {}),
+                            "status": node.get('status', {})
+                        }
+                        
+                        # Apply node
+                        create_cmd = ["kubectl", "apply", "-f", "-"]
+                        process = subprocess.Popen(create_cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                        stdout, stderr = process.communicate(input=yaml.dump(node_manifest))
+                        
+                        if process.returncode != 0:
+                            logger.error(f"Failed to create node: {stderr}")
+                            return False
+                else:
+                    logger.warning("No cluster definition found in scenario, creating default nodes")
+                    # Fallback to standard nodes if scenario has no cluster definition
+                    standard_nodes = self.generate_cluster_nodes(num_nodes=3, cpu_per_node="2", memory_per_node="4Gi")
+                    for node in standard_nodes:
+                        node_manifest = {
+                            "apiVersion": "v1",
+                            "kind": "Node",
+                            "metadata": node.get('metadata', {}),
+                            "status": node.get('status', {})
+                        }
+                        create_cmd = ["kubectl", "apply", "-f", "-"]
+                        process = subprocess.Popen(create_cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                        stdout, stderr = process.communicate(input=yaml.dump(node_manifest))
+                        if process.returncode != 0:
+                            logger.error(f"Failed to create fallback node: {stderr}")
+                            return False
+            
+            # Step 4: Wait for nodes to be ready
+            if not self.wait_for_nodes_ready():
+                logger.error("Nodes did not become ready")
+                return False
+            
+            # Step 5: Validate cluster state
+            if not self.validate_cluster_state():
+                logger.error("Cluster validation failed")
+                return False
+            
+            logger.info("Cluster is in clean state and ready for experiment")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error ensuring clean cluster state: {str(e)}")
+            return False
+    
+    def reset_scheduler_config(self) -> bool:
+        """Reset scheduler configuration to default state."""
+        try:
+            logger.info("Resetting scheduler configuration...")
+            
+            # Default scheduler config with standard plugin weights
+            default_config = {
+                "profiles": [{
+                    "schedulerName": "default-scheduler",
+                    "plugins": {
+                        "score": {
+                            "enabled": [
+                                {"name": "NodeResourcesFit", "weight": 1},
+                                {"name": "ImageLocality", "weight": 1},
+                                {"name": "InterPodAffinity", "weight": 1},
+                                {"name": "NodeAffinity", "weight": 1},
+                                {"name": "PodTopologySpread", "weight": 2},
+                                {"name": "TaintToleration", "weight": 1}
+                            ]
+                        }
+                    }
+                }]
+            }
+            
+            # If scheduler simulator is available, reset it
+            if self.scheduler_simulator_url:
+                try:
+                    import requests
+                    response = requests.put(
+                        self.scheduler_simulator_url,
+                        json=default_config,
+                        timeout=10
+                    )
+                    if response.status_code != 200:
+                        logger.warning(f"Scheduler reset returned status {response.status_code}")
+                        return False
+                except ImportError:
+                    logger.warning("requests module not available, skipping scheduler reset")
+                    return False
+                except Exception as e:
+                    logger.warning(f"Failed to reset scheduler config via API: {str(e)}")
+                    return False
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error resetting scheduler config: {str(e)}")
+            return False
+    
+    def is_kwok_environment(self) -> bool:
+        """Check if running in KWOK environment."""
+        try:
+            # Check if any node has kwok provider label
+            cmd = ["kubectl", "get", "nodes", "-o", "jsonpath={.items[*].metadata.labels.type}"]
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+            
+            if result.returncode == 0 and "kwok" in result.stdout:
+                return True
+            
+            # Also check for kwok annotation
+            cmd = ["kubectl", "get", "nodes", "-o", "jsonpath={.items[*].metadata.annotations}"]
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+            
+            if result.returncode == 0 and "kwok" in result.stdout.lower():
+                return True
+                
+        except Exception:
+            pass
+        
+        return False
+    
+    def wait_for_nodes_ready(self, timeout: int = 120) -> bool:
+        """Wait for all nodes to become ready."""
+        logger.info("Waiting for nodes to become ready...")
+        start_time = time.time()
+        
+        while time.time() - start_time < timeout:
+            cmd = ["kubectl", "get", "nodes", "-o", "jsonpath={.items[*].status.conditions[?(@.type=='Ready')].status}"]
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+            
+            if result.returncode == 0:
+                statuses = result.stdout.strip().split()
+                if statuses and all(status == "True" for status in statuses):
+                    logger.info("All nodes are ready")
+                    return True
+            
+            time.sleep(5)
+        
+        return False
+    
+    def validate_cluster_state(self) -> bool:
+        """Validate that cluster is in expected clean state."""
+        try:
+            logger.info("Validating cluster state...")
+            
+            # Check no non-system pods exist
+            cmd = ["kubectl", "get", "pods", "--all-namespaces", "-o", "json"]
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            
+            if result.returncode == 0:
+                pods_data = json.loads(result.stdout)
+                system_namespaces = {"kube-system", "kube-public", "kube-node-lease", "local-path-storage"}
+                
+                non_system_pods = [
+                    pod for pod in pods_data.get('items', [])
+                    if pod['metadata']['namespace'] not in system_namespaces
+                ]
+                
+                if non_system_pods:
+                    logger.warning(f"Found {len(non_system_pods)} non-system pods")
+                    for pod in non_system_pods:
+                        logger.warning(f"  - {pod['metadata']['namespace']}/{pod['metadata']['name']}")
+                    return False
+            
+            # Check nodes are ready
+            cmd = ["kubectl", "get", "nodes", "-o", "json"]
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            
+            if result.returncode == 0:
+                nodes_data = json.loads(result.stdout)
+                nodes = nodes_data.get('items', [])
+                
+                if not nodes:
+                    logger.error("No nodes found in cluster")
+                    return False
+                
+                for node in nodes:
+                    conditions = node.get('status', {}).get('conditions', [])
+                    ready_condition = next((c for c in conditions if c['type'] == 'Ready'), None)
+                    
+                    if not ready_condition or ready_condition['status'] != 'True':
+                        logger.error(f"Node {node['metadata']['name']} is not ready")
+                        return False
+            
+            logger.info("Cluster validation passed")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error validating cluster: {str(e)}")
+            return False
+    
+    def reset_cluster(self) -> bool:
+        """Legacy reset function - kept for backward compatibility."""
+        # This is kept for backward compatibility
+        # In the new flow, we'll call ensure_clean_cluster_state with the scenario path
+        logger.warning("Using legacy reset_cluster - should use ensure_clean_cluster_state instead")
+        try:
+            # Basic reset without scenario-specific node creation
+            reset_cmd = ["./bin/keg", "cluster", "reset", "--force"]
             result = subprocess.run(reset_cmd, capture_output=True, text=True, timeout=60)
             
             if result.returncode != 0:
                 logger.warning(f"Cluster reset warning: {result.stderr}")
-                # Continue anyway, as reset might fail if cluster doesn't exist
             
-            # Wait for cluster to be ready
             time.sleep(5)
-            
-            # Verify cluster is accessible
-            verify_cmd = ["kubectl", "get", "nodes"]
-            result = subprocess.run(verify_cmd, capture_output=True, text=True, timeout=30)
-            
-            if result.returncode != 0:
-                logger.error(f"Cluster verification failed: {result.stderr}")
-                return False
-                
-            logger.info("Cluster reset successful")
             return True
-            
-        except subprocess.TimeoutExpired:
-            logger.error("Cluster reset timed out")
-            return False
         except Exception as e:
-            logger.error(f"Error resetting cluster: {str(e)}")
+            logger.error(f"Error in legacy reset: {str(e)}")
             return False
     
     def verify_cluster_nodes(self) -> bool:
@@ -326,40 +592,65 @@ class ExperimentRunner:
         run_dir = os.path.join(self.experiment_results_dir, run_name)
         
         try:
-            # Find the scenario file
-            scenario_path = os.path.join(self.base_dir, f"{param_name}_seed{seed}_{weight_name}.yaml")
+            # Find the scenario file in scenarios directory
+            scenario_path = os.path.join("scenarios", f"{param_name}_seed{seed}_{weight_name}.yaml")
             
             if not os.path.exists(scenario_path):
                 logger.error(f"Scenario file not found: {scenario_path}")
                 return False
             
-            # Step 1: Run simulation with cluster reset
-            # KEG simulation start handles cluster setup and reset with --cluster-reset flag
+            # Step 1: Ensure clean cluster state before experiment
+            logger.info(f"Preparing cluster for experiment: {run_name}")
+            if not self.ensure_clean_cluster_state(scenario_path):
+                logger.error(f"Failed to prepare cluster for {run_name}")
+                return False
+            
+            # Step 2: Run simulation (without --cluster-reset since we already reset)
             cmd = [
                 "./bin/keg", "simulation", "start",
                 "-s", scenario_path,
                 "--output-dir", run_dir,
-                "--save-metrics",
-                "--cluster-reset"  # This handles cluster reset and setup
+                "--save-metrics"
+                # Note: removed --cluster-reset flag since we handle it manually now
             ]
             
-            logger.info(f"Running simulation with cluster reset: {run_name}")
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)  # 10 minute timeout
+            logger.info(f"Running simulation: {run_name}")
+            logger.info(f"Command: {' '.join(cmd)}")
             
-            if result.returncode != 0:
-                logger.error(f"Simulation failed for {run_name}: {result.stderr}")
-                logger.error(f"Simulation stdout: {result.stdout}")
+            # Run with better output handling
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            stdout_lines = []
+            stderr_lines = []
+            
+            try:
+                # Wait for completion with timeout
+                stdout, stderr = process.communicate(timeout=600)  # 10 minute timeout
+                
+                if stdout:
+                    stdout_lines = stdout.splitlines()
+                    for line in stdout_lines[-20:]:  # Log last 20 lines
+                        logger.debug(f"[KEG] {line}")
+                
+                if stderr:
+                    stderr_lines = stderr.splitlines()
+                    for line in stderr_lines:
+                        logger.warning(f"[KEG ERROR] {line}")
+                
+                if process.returncode != 0:
+                    logger.error(f"Simulation failed for {run_name} with return code {process.returncode}")
+                    if stderr_lines:
+                        logger.error(f"Last error lines: {stderr_lines[-10:]}")
+                    return False
+                    
+            except subprocess.TimeoutExpired:
+                logger.error(f"Simulation timed out after 600 seconds")
+                process.terminate()
+                time.sleep(5)
+                if process.poll() is None:
+                    process.kill()
                 return False
             
-            # Step 2: Verify cluster nodes are ready after simulation
-            if not self.verify_cluster_nodes():
-                logger.warning(f"Cluster nodes not ready after simulation {run_name}")
-                # Don't fail the experiment as the simulation might have completed successfully
-            
-            # Step 3: Cleanup any remaining resources
-            self.cleanup_cluster_resources()
-            
-            # Save weight configuration metadata
+            # Step 3: Save weight configuration metadata
             os.makedirs(run_dir, exist_ok=True)
             with open(os.path.join(run_dir, "weight_config.json"), 'w') as f:
                 json.dump({
@@ -373,9 +664,6 @@ class ExperimentRunner:
             logger.info(f"Experiment {run_name} completed successfully")
             return True
             
-        except subprocess.TimeoutExpired:
-            logger.error(f"Experiment {run_name} timed out")
-            return False
         except Exception as e:
             logger.error(f"Error running {run_name}: {str(e)}")
             return False
@@ -444,49 +732,14 @@ class ExperimentRunner:
         
         # First, generate all scenarios
         logger.info("Generating scenarios...")
-        scenarios_generated = 0
-        for param_vector in self.parameter_vectors:
-            # Generate config file
-            config_path = os.path.join(self.base_dir, f"config_{param_vector['name']}.yaml")
-            self.generate_config_file(param_vector, config_path)
-            
-            # Generate scenarios for each seed
-            for seed in self.seeds:
-                # Update config to include seed in scenario name
-                temp_config = config_path.replace('.yaml', f'_seed{seed}.yaml')
-                seed_param_vector = param_vector.copy()
-                seed_param_vector['name'] = f"{param_vector['name']}_seed{seed}"
-                self.generate_config_file(seed_param_vector, temp_config)
-                
-                # KEG should now save to scenarios/{scenarioName}.yaml with correct config
-                expected_scenario_path = os.path.join("scenarios", f"{seed_param_vector['name']}.yaml")
-                
-                cmd = [
-                    "./bin/keg", "scenario", "generate",
-                    "-c", temp_config,
-                    "--seed", str(seed)
-                ]
-                
-                result = subprocess.run(cmd, capture_output=True, text=True)
-                if result.returncode != 0:
-                    logger.error(f"Failed to generate scenario: {result.stderr}")
-                    continue
-                
-                # Check if the scenario was actually created
-                if not os.path.exists(expected_scenario_path):
-                    logger.error(f"Expected scenario file not found: {expected_scenario_path}")
-                    continue
-                
-                # Create versions with different weights
-                for weight_config in self.weight_configs:
-                    weighted_scenario_path = os.path.join(
-                        self.base_dir, 
-                        f"{param_vector['name']}_seed{seed}_{weight_config['name']}.yaml"
-                    )
-                    self.generate_scenario_with_weights(expected_scenario_path, weight_config, weighted_scenario_path)
-                    scenarios_generated += 1
+        scenarios_generated, scenarios_failed = self.generate_all_scenarios()
         
-        logger.info(f"Generated {scenarios_generated} scenario files")
+        if scenarios_failed > 0:
+            logger.warning(f"Failed to generate {scenarios_failed} scenarios")
+        
+        if scenarios_generated == 0:
+            logger.error("No scenarios were generated successfully")
+            return 0, total_experiments
         
         # Run experiments in batches
         logger.info("Running experiments...")
@@ -619,63 +872,75 @@ class ExperimentRunner:
         scenarios_generated = 0
         scenarios_failed = 0
         
+        # Ensure scenarios directory exists
+        os.makedirs("scenarios", exist_ok=True)
+        
         # Generate scenarios
         for param_vector in self.parameter_vectors:
             logger.info(f"Generating scenarios for parameter vector: {param_vector['name']}")
             
-            # Generate config file
-            config_path = os.path.join(self.base_dir, f"config_{param_vector['name']}.yaml")
-            self.generate_config_file(param_vector, config_path)
-            logger.info(f"Created config file: {config_path}")
-            
             # Generate scenarios for each seed
             for seed in self.seeds:
-                # Update config to include seed in scenario name
-                temp_config = config_path.replace('.yaml', f'_seed{seed}.yaml')
+                # Create a unique scenario name with seed
+                scenario_name = f"{param_vector['name']}_seed{seed}"
+                
+                # Create config with cluster spec embedded
+                config_path = os.path.join(self.base_dir, f"config_{scenario_name}.yaml")
                 seed_param_vector = param_vector.copy()
-                seed_param_vector['name'] = f"{param_vector['name']}_seed{seed}"
-                self.generate_config_file(seed_param_vector, temp_config)
+                seed_param_vector['name'] = scenario_name
+                self.generate_config_file(seed_param_vector, config_path, include_cluster=True)
                 
-                # KEG should now save to scenarios/{scenarioName}.yaml with correct config
-                expected_scenario_path = os.path.join("scenarios", f"{seed_param_vector['name']}.yaml")
-                
+                # Generate scenario using KEG
                 cmd = [
                     "./bin/keg", "scenario", "generate",
-                    "-c", temp_config,
+                    "-c", config_path,
                     "--seed", str(seed)
                 ]
                 
-                logger.info(f"Generating base scenario with seed {seed}: {expected_scenario_path}")
+                # Expected output path based on KEG's behavior - scenarios folder
+                expected_scenario_path = os.path.join("scenarios", f"{scenario_name}.yaml")
+                
+                # Ensure scenarios directory exists
+                os.makedirs("scenarios", exist_ok=True)
+                
+                logger.info(f"Generating base scenario: {scenario_name}")
                 result = subprocess.run(cmd, capture_output=True, text=True)
+                
                 if result.returncode != 0:
-                    logger.error(f"Failed to generate base scenario: {result.stderr}")
+                    logger.error(f"Failed to generate scenario: {result.stderr}")
                     scenarios_failed += 1
                     continue
                 
-                # Check if the scenario was actually created
+                # Verify scenario was created
                 if not os.path.exists(expected_scenario_path):
-                    logger.error(f"Expected scenario file not found: {expected_scenario_path}")
-                    logger.error(f"KEG stdout: {result.stdout}")
-                    logger.error(f"KEG stderr: {result.stderr}")
+                    logger.error(f"Scenario file not found at expected location: {expected_scenario_path}")
+                    logger.debug(f"KEG output: {result.stdout}")
                     scenarios_failed += 1
                     continue
                 
-                logger.info(f"Base scenario generated successfully: {expected_scenario_path}")
+                logger.info(f"Base scenario generated: {expected_scenario_path}")
                 
-                # Create versions with different weights
+                # Create versions with different scheduler weights
                 for weight_config in self.weight_configs:
+                    # Final scenario path in scenarios directory for consistency
                     weighted_scenario_path = os.path.join(
-                        self.base_dir, 
+                        "scenarios", 
                         f"{param_vector['name']}_seed{seed}_{weight_config['name']}.yaml"
                     )
                     
                     try:
                         self.generate_scenario_with_weights(expected_scenario_path, weight_config, weighted_scenario_path)
                         scenarios_generated += 1
-                        logger.info(f"Generated weighted scenario: {weighted_scenario_path}")
+                        logger.debug(f"Generated weighted scenario: {weighted_scenario_path}")
                     except Exception as e:
-                        logger.error(f"Failed to generate weighted scenario {weighted_scenario_path}: {str(e)}")
+                        logger.error(f"Failed to generate weighted scenario: {str(e)}")
                         scenarios_failed += 1
+                
+                # Clean up temporary config file
+                try:
+                    os.remove(config_path)
+                except Exception:
+                    pass
         
         logger.info(f"Scenario generation complete!")
         logger.info(f"Generated: {scenarios_generated}, Failed: {scenarios_failed}")
@@ -749,8 +1014,15 @@ Estimated time: 8-12 hours depending on configuration.
                        help="Generate scenarios but don't run simulations")
     parser.add_argument("--continue-from", type=str,
                        help="Continue from specific experiment ID")
+    parser.add_argument("--debug", action="store_true",
+                       help="Enable debug logging")
     
     args = parser.parse_args()
+    
+    # Set logging level based on debug flag
+    if args.debug:
+        logging.getLogger().setLevel(logging.DEBUG)
+        logger.info("Debug logging enabled")
     
     runner = ExperimentRunner(args.base_dir, args.results_dir)
     
