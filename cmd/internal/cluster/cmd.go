@@ -314,7 +314,6 @@ func isSystemNamespace(name string) bool {
 		"kube-system",
 		"kube-public",
 		"kube-node-lease",
-		"default",
 	}
 
 	for _, ns := range systemNamespaces {
