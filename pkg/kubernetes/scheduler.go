@@ -11,8 +11,8 @@ import (
 	"net/http"
 )
 
+// Default scheduler plugins as per Kubernetes default configuration
 const (
-	// Default scheduler plugins as per Kubernetes default configuration
 	SchedulingGates                 = "SchedulingGates"
 	PrioritySort                    = "PrioritySort"
 	NodeUnschedulable               = "NodeUnschedulable"
@@ -36,8 +36,8 @@ const (
 	DefaultBinder                   = "DefaultBinder"
 )
 
-// KubeSchedulerManager defines the interface for managing scheduler plugins.
-type KubeSchedulerManager interface {
+// SchedulerManager defines the interface for managing scheduler plugins.
+type SchedulerManager interface {
 	// GetPluginWeights returns current weights for all plugins.
 	GetPluginWeights(ctx context.Context) (map[string]int32, error)
 

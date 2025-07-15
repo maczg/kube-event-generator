@@ -8,6 +8,12 @@ import (
 	"github.com/maczg/kube-event-generator/pkg/logger"
 )
 
+// schedulerContextKey is a type-safe context key for scheduler injection
+type schedulerContextKey struct{}
+
+// SchedulerContextKey is the key used to store/retrieve scheduler from context
+var SchedulerContextKey = schedulerContextKey{}
+
 // Scheduler interface defines the contract for the event scheduler
 type Scheduler interface {
 	// Start starts the scheduler
@@ -20,6 +26,7 @@ type Scheduler interface {
 	GetEvents() []SchedulableEvent
 	// StartedAt returns the time when the scheduler was started
 	StartedAt() time.Time
+	ResetStartTime() error
 }
 
 // scheduler is the main implementation of the Scheduler interface
@@ -34,10 +41,6 @@ type scheduler struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 	done   chan struct{}
-
-	// Eviction timers for events with duration
-	evictionTimers map[string]*time.Timer
-	evictionMu     sync.RWMutex
 }
 
 // New creates a new scheduler
@@ -47,10 +50,9 @@ func New(log *logger.Logger) Scheduler {
 	}
 
 	return &scheduler{
-		logger:         log,
-		queue:          NewQueue[SchedulableEvent](),
-		done:           make(chan struct{}),
-		evictionTimers: make(map[string]*time.Timer),
+		logger: log,
+		queue:  NewQueue[SchedulableEvent](),
+		done:   make(chan struct{}),
 	}
 }
 
@@ -77,6 +79,20 @@ func (s *scheduler) Start(ctx context.Context) error {
 	return nil
 }
 
+// ResetStartTime resets the start time of the scheduler
+func (s *scheduler) ResetStartTime() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if !s.running {
+		return ErrSchedulerNotStarted
+	}
+
+	s.startTime = time.Now()
+	s.logger.Infof("scheduler start time reset to %v", s.startTime)
+	return nil
+}
+
 // Stop gracefully stops the scheduler
 func (s *scheduler) Stop() error {
 	s.mu.Lock()
@@ -97,22 +113,12 @@ func (s *scheduler) Stop() error {
 	// Wait for scheduler loop to finish
 	<-s.done
 
-	// Cancel all eviction timers
-	s.cancelAllEvictionTimers()
-
 	s.logger.Info("scheduler stopped")
 	return nil
 }
 
 // Schedule adds an event to the queue
 func (s *scheduler) Schedule(event SchedulableEvent) error {
-	s.mu.RLock()
-	if !s.running {
-		s.mu.RUnlock()
-		return ErrSchedulerNotStarted
-	}
-	s.mu.RUnlock()
-
 	if event == nil {
 		return ErrInvalidEvent
 	}
@@ -122,8 +128,8 @@ func (s *scheduler) Schedule(event SchedulableEvent) error {
 		return err
 	}
 
-	s.logger.Debugf("event scheduled: %s (type: %s, arrival: %v)",
-		event.GetID(), event.GetType(), event.Arrival())
+	s.logger.Debugf("event scheduled: %s (arrival: %v)",
+		event.GetID(), event.Arrival())
 
 	return nil
 }
@@ -178,7 +184,6 @@ func (s *scheduler) processReadyEvents() {
 		if err != nil {
 			break
 		}
-
 		s.executeEvent(event)
 	}
 }
@@ -187,8 +192,9 @@ func (s *scheduler) processReadyEvents() {
 func (s *scheduler) executeEvent(event SchedulableEvent) {
 	s.logger.Debugf("executing event: %s", event.GetID())
 
-	// Create execution context with timeout
-	ctx, cancel := context.WithTimeout(s.ctx, 30*time.Second)
+	// Create execution context with timeout and inject scheduler
+	ctx := context.WithValue(s.ctx, SchedulerContextKey, s)
+	ctx, cancel := context.WithTimeout(ctx, event.GetExecuteTimeout())
 	defer cancel()
 
 	// Execute the event
@@ -198,57 +204,5 @@ func (s *scheduler) executeEvent(event SchedulableEvent) {
 	} else {
 		event.SetStatus(EventStatusCompleted)
 		s.logger.Debugf("event executed successfully: %s", event.GetID())
-	}
-
-	// Schedule eviction if the event has a duration
-	if event.Eviction() != nil {
-		s.scheduleEviction(event)
-	}
-}
-
-// scheduleEviction schedules an eviction for an event after its duration
-func (s *scheduler) scheduleEviction(event SchedulableEvent) {
-	evictionTime := *event.Eviction()
-
-	timer := time.AfterFunc(evictionTime, func() {
-		s.handleEviction(event)
-	})
-
-	s.evictionMu.Lock()
-	s.evictionTimers[event.GetID()] = timer
-	s.evictionMu.Unlock()
-
-	s.logger.Debugf("eviction scheduled for event %s in %v", event.GetID(), evictionTime)
-}
-
-// handleEviction handles the eviction of an event
-func (s *scheduler) handleEviction(event SchedulableEvent) {
-	s.logger.Infof("evicting event: %s", event.GetID())
-
-	// Remove timer from map
-	s.evictionMu.Lock()
-	delete(s.evictionTimers, event.GetID())
-	s.evictionMu.Unlock()
-
-	// Create eviction context with timeout
-	ctx, cancel := context.WithTimeout(s.ctx, 30*time.Second)
-	defer cancel()
-
-	// Use the event's custom eviction function
-	if err := event.EvictionFn(ctx); err != nil {
-		s.logger.Errorf("event eviction failed: %s - %v", event.GetID(), err)
-	} else {
-		s.logger.Infof("event evicted successfully: %s", event.GetID())
-	}
-}
-
-// cancelAllEvictionTimers cancels all pending eviction timers
-func (s *scheduler) cancelAllEvictionTimers() {
-	s.evictionMu.Lock()
-	defer s.evictionMu.Unlock()
-
-	for eventID, timer := range s.evictionTimers {
-		timer.Stop()
-		delete(s.evictionTimers, eventID)
 	}
 }
