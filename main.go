@@ -34,8 +34,12 @@ func main() {
 			},
 		},
 	})
-	scdl.Schedule(podEvent)
-	scdl.Start(context.Background())
+	if err := scdl.Schedule(podEvent); err != nil {
+		panic(err)
+	}
+	if err := scdl.Start(context.Background()); err != nil {
+		panic(err)
+	}
 	time.Sleep(1500 * time.Second)
 
 }

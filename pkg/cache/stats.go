@@ -218,10 +218,10 @@ func (s *Stats) ExportCSV(dir string) error {
 	// Export the pending times
 	header := []string{"pod_uid", "pod_name", "pending_time_milliseconds"}
 	writer := csv.NewWriter(filePendingDurations)
-	writer.Write(header)
+	_ = writer.Write(header)
 
 	for k, pendingTime := range s.PendingDurations {
-		writer.Write([]string{k.GetUID(), k.GetName(), fmt.Sprintf("%d", pendingTime.Milliseconds())})
+		_ = writer.Write([]string{k.GetUID(), k.GetName(), fmt.Sprintf("%d", pendingTime.Milliseconds())})
 	}
 
 	writer.Flush()
@@ -229,10 +229,10 @@ func (s *Stats) ExportCSV(dir string) error {
 	// Export the running times
 	header = []string{"pod_uid", "pod_name", "running_time_milliseconds"}
 	writer = csv.NewWriter(fileRunningDurations)
-	writer.Write(header)
+	_ = writer.Write(header)
 
 	for k, runningTime := range s.RunningDurations {
-		writer.Write([]string{k.GetUID(), k.GetName(), fmt.Sprintf("%d", runningTime.Milliseconds())})
+		_ = writer.Write([]string{k.GetUID(), k.GetName(), fmt.Sprintf("%d", runningTime.Milliseconds())})
 	}
 
 	writer.Flush()
@@ -240,7 +240,7 @@ func (s *Stats) ExportCSV(dir string) error {
 	// Export the queue length history
 	header = []string{"timestamp", "length"}
 	writer = csv.NewWriter(fileQueueLength)
-	writer.Write(header)
+	_ = writer.Write(header)
 
 	podQHistory := s.GetPodQueueHistory()
 	sort.Slice(podQHistory, func(i, j int) bool {
@@ -248,7 +248,7 @@ func (s *Stats) ExportCSV(dir string) error {
 	})
 
 	for _, value := range podQHistory {
-		writer.Write([]string{value.At.Format(defaultTimeFormat), strconv.Itoa(value.Value)})
+		_ = writer.Write([]string{value.At.Format(defaultTimeFormat), strconv.Itoa(value.Value)})
 	}
 
 	writer.Flush()

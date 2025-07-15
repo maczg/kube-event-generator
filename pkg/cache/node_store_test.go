@@ -91,8 +91,8 @@ func TestNodeStatus_Update(t *testing.T) {
 	nodeCPUCapacity := nodeStatus.Allocatable[v1.ResourceCPU]
 	nodeMemoryCapacity := nodeStatus.Allocatable[v1.ResourceMemory]
 
-	expectedCPURatio := float64(expectedCPU.Value()) / float64(nodeCPUCapacity.Value())
-	expectedMemoryRatio := float64(expectedMemory.Value()) / float64(nodeMemoryCapacity.Value())
+	expectedCPURatio := float64(expectedCPU.MilliValue()) / float64(nodeCPUCapacity.MilliValue())
+	expectedMemoryRatio := float64(expectedMemory.MilliValue()) / float64(nodeMemoryCapacity.MilliValue())
 
 	ratio := nodeStatus.GetAllocatedRatio()
 	if ratio[v1.ResourceCPU] != expectedCPURatio {

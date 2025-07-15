@@ -7,14 +7,14 @@ import (
 
 // Common scheduler errors
 var (
-	ErrSchedulerNotStarted    = errors.New("scheduler not started")
+	ErrSchedulerNotStarted     = errors.New("scheduler not started")
 	ErrSchedulerAlreadyStarted = errors.New("scheduler already started")
-	ErrSchedulerStopped       = errors.New("scheduler stopped")
-	ErrInvalidEvent           = errors.New("invalid event")
-	ErrEventNotFound          = errors.New("event not found")
-	ErrQueueEmpty             = errors.New("queue is empty")
-	ErrEventTimeout           = errors.New("event execution timeout")
-	ErrHandlerNotFound        = errors.New("handler not found for event type")
+	ErrSchedulerStopped        = errors.New("scheduler stopped")
+	ErrInvalidEvent            = errors.New("invalid event")
+	ErrEventNotFound           = errors.New("event not found")
+	ErrQueueEmpty              = errors.New("queue is empty")
+	ErrEventTimeout            = errors.New("event execution timeout")
+	ErrHandlerNotFound         = errors.New("handler not found for event type")
 )
 
 // EventError represents an error that occurred during event processing

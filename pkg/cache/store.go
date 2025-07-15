@@ -48,13 +48,13 @@ func (s *Store) Start() {
 	nodeInformer := factory.Core().V1().Nodes().Informer()
 	podInformer := factory.Core().V1().Pods().Informer()
 
-	nodeInformer.AddEventHandler(cc.ResourceEventHandlerFuncs{
+	_, _ = nodeInformer.AddEventHandler(cc.ResourceEventHandlerFuncs{
 		AddFunc:    s.onAddNode,
 		UpdateFunc: s.onUpdateNode,
 		DeleteFunc: s.onDeleteNode,
 	})
 
-	podInformer.AddEventHandler(cc.ResourceEventHandlerFuncs{
+	_, _ = podInformer.AddEventHandler(cc.ResourceEventHandlerFuncs{
 		AddFunc:    s.addPod,
 		UpdateFunc: s.updatePod,
 		DeleteFunc: s.deletePod,

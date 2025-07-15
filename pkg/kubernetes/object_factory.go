@@ -22,7 +22,7 @@ type objectFactory struct{}
 func (f *objectFactory) NewPod(namespace string, opts ...PodOpt) *v1.Pod {
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      names.SimpleNameGenerator.GenerateName(fmt.Sprintf("pod-")),
+			Name:      names.SimpleNameGenerator.GenerateName("pod-"),
 			Namespace: namespace,
 			Labels:    make(map[string]string),
 		},

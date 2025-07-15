@@ -73,10 +73,10 @@ func (q *Queue[T]) PushEvent(event T) error {
 	if q.IsFull() {
 		return NewQueueError("push", fmt.Errorf("queue capacity exceeded: %d", q.capacity))
 	}
-	
+
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	
+
 	heap.Push(q, event)
 	return nil
 }
@@ -99,7 +99,7 @@ func (q *Queue[T]) PopEvent() (T, error) {
 func (q *Queue[T]) GetEvents() []T {
 	q.mu.RLock()
 	defer q.mu.RUnlock()
-	
+
 	events := make([]T, len(q.items))
 	copy(events, q.items)
 	return events
@@ -109,7 +109,7 @@ func (q *Queue[T]) GetEvents() []T {
 func (q *Queue[T]) FindEvent(eventID string) (T, bool) {
 	q.mu.RLock()
 	defer q.mu.RUnlock()
-	
+
 	var zero T
 	for _, event := range q.items {
 		if event.GetID() == eventID {
@@ -123,7 +123,7 @@ func (q *Queue[T]) FindEvent(eventID string) (T, bool) {
 func (q *Queue[T]) RemoveEvent(eventID string) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	
+
 	for i, event := range q.items {
 		if event.GetID() == eventID {
 			// Mark as canceled before removing

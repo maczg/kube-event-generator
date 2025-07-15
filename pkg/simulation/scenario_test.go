@@ -23,10 +23,10 @@ events:
           containers:
             - name: test-container
               image: nginx
-          resources:
-            limits:
-              cpu: "100m"
-              memory: "128Mi"
+              resources:
+                limits:
+                  cpu: "100m"
+                  memory: "128Mi"
 `
 
 func TestLoadFromYaml(t *testing.T) {

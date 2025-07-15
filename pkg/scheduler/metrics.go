@@ -9,24 +9,24 @@ import (
 // Metrics holds performance and operational metrics for the scheduler
 type Metrics struct {
 	// Event counters
-	EventsScheduled  *AtomicCounter
-	EventsExecuted   *AtomicCounter
-	EventsCompleted  *AtomicCounter
-	EventsFailed     *AtomicCounter
-	EventsCanceled   *AtomicCounter
-	EventsEvicted    *AtomicCounter
-	
+	EventsScheduled *AtomicCounter
+	EventsExecuted  *AtomicCounter
+	EventsCompleted *AtomicCounter
+	EventsFailed    *AtomicCounter
+	EventsCanceled  *AtomicCounter
+	EventsEvicted   *AtomicCounter
+
 	// Queue metrics
-	QueueSize        *AtomicGauge
-	MaxQueueSize     *AtomicGauge
-	
+	QueueSize    *AtomicGauge
+	MaxQueueSize *AtomicGauge
+
 	// Performance metrics
 	ExecutionDuration *Histogram
-	
+
 	// Timing metrics
-	StartTime         time.Time
-	LastEventTime     time.Time
-	lastEventMu       sync.RWMutex
+	StartTime     time.Time
+	LastEventTime time.Time
+	lastEventMu   sync.RWMutex
 }
 
 // NewMetrics creates a new Metrics instance
@@ -190,10 +190,10 @@ func NewHistogram() *Histogram {
 func (h *Histogram) Observe(value float64) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	
+
 	h.count++
 	h.sum += value
-	
+
 	// Update min/max
 	if h.count == 1 {
 		h.min = value
@@ -206,7 +206,7 @@ func (h *Histogram) Observe(value float64) {
 			h.max = value
 		}
 	}
-	
+
 	// Store sample (with basic capacity management)
 	if len(h.samples) < cap(h.samples) {
 		h.samples = append(h.samples, value)
@@ -220,24 +220,24 @@ func (h *Histogram) Observe(value float64) {
 func (h *Histogram) Stats() map[string]float64 {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	
+
 	stats := map[string]float64{
 		"count": float64(h.count),
 		"sum":   h.sum,
 		"min":   h.min,
 		"max":   h.max,
 	}
-	
+
 	if h.count > 0 {
 		stats["mean"] = h.sum / float64(h.count)
 	}
-	
+
 	// Calculate percentiles if we have enough samples
 	if len(h.samples) > 0 {
 		// Make a copy for sorting
 		samples := make([]float64, len(h.samples))
 		copy(samples, h.samples)
-		
+
 		// Simple bubble sort for small datasets
 		for i := 0; i < len(samples)-1; i++ {
 			for j := 0; j < len(samples)-i-1; j++ {
@@ -246,7 +246,7 @@ func (h *Histogram) Stats() map[string]float64 {
 				}
 			}
 		}
-		
+
 		// Calculate percentiles
 		if len(samples) >= 2 {
 			stats["p50"] = percentile(samples, 0.5)
@@ -255,7 +255,7 @@ func (h *Histogram) Stats() map[string]float64 {
 			stats["p99"] = percentile(samples, 0.99)
 		}
 	}
-	
+
 	return stats
 }
 
@@ -267,15 +267,15 @@ func percentile(sortedSamples []float64, p float64) float64 {
 	if len(sortedSamples) == 1 {
 		return sortedSamples[0]
 	}
-	
+
 	index := p * float64(len(sortedSamples)-1)
 	lower := int(index)
 	upper := lower + 1
-	
+
 	if upper >= len(sortedSamples) {
 		return sortedSamples[len(sortedSamples)-1]
 	}
-	
+
 	weight := index - float64(lower)
 	return sortedSamples[lower]*(1-weight) + sortedSamples[upper]*weight
 }
@@ -284,7 +284,7 @@ func percentile(sortedSamples []float64, p float64) float64 {
 func (h *Histogram) Reset() {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	
+
 	h.samples = h.samples[:0]
 	h.count = 0
 	h.sum = 0
