@@ -3,6 +3,8 @@ ignore
 results
 !results/example
 bin
+.DS_Store
+CLAUDE.md
 
 ### Go template
 # If you prefer the allow list template instead of the deny list, see community template:
