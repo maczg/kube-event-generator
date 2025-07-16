@@ -1,0 +1,8 @@
+timestamp,pod_name,node_name,phase,event_type,cpu_req,mem_req
+2025-07-16T16:34:33.513,pod-1,,Pending,add,0,0
+2025-07-16T16:34:33.521,pod-1,node-bkpfh,Pending,update,0,0
+2025-07-16T16:34:33.529,pod-1,node-bkpfh,Running,update,0,0
+2025-07-16T16:34:33.651,pod-1,node-bkpfh,Running,update,0,0
+2025-07-16T16:34:43.607,pod-1,node-bkpfh,Running,update,0,0
+2025-07-16T16:34:43.614,pod-1,node-bkpfh,Running,update,0,0
+2025-07-16T16:34:43.618,pod-1,node-bkpfh,Running,delete,0,0

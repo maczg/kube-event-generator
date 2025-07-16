@@ -1,0 +1,25 @@
+metadata:
+  name: "Scenario Example"
+  description: "An example scenario for demonstration purposes."
+events:
+  pods:
+    - name: pod-1
+      arrivalTime: 5s
+      evictTime: 10s
+      podSpec:
+        apiVersion: v1
+        kind: Pod
+        metadata:
+          name: "pod-1"
+          namespace: "default"
+        spec:
+            containers:
+              - name: "container-1"
+                image: "nginx:latest"
+            resources:
+              requests:
+               cpu: "100m"
+               memory: "128Mi"
+              limits:
+               cpu: "200m"
+               memory: "256Mi"

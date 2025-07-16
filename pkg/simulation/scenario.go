@@ -9,14 +9,15 @@ import (
 type Metadata struct {
 	// Name is the name of the scenario
 	Name string `yaml:"name" json:"name"`
-	// CreatedAt is the timestamp when the scenario was created
-	CreatedAt string `yaml:"createdAt" json:"createdAt"`
 	// Description provides a brief description of the scenario
 	Description string `yaml:"description" json:"description"`
+	// CreatedAt is the timestamp when the scenario was created
+	CreatedAt string `yaml:"createdAt" json:"createdAt"`
 }
 
 type Events struct {
-	Pods []PodEvent `yaml:"pods" json:"pods"`
+	Pods      []PodEvent           `yaml:"pods" json:"pods"`
+	Scheduler []KubeSchedulerEvent `yaml:"scheduler" json:"scheduler"`
 }
 
 type Cluster struct {

@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"github.com/maczg/kube-event-generator/cmd/cluster"
+	"github.com/maczg/kube-event-generator/cmd/simulation"
 	"github.com/maczg/kube-event-generator/pkg/logger"
 	"github.com/spf13/cobra"
 	"os"
@@ -55,6 +56,7 @@ func (app *App) setupCommands() {
 	// Add sub-commands.
 	app.rootCmd.AddCommand(
 		cluster.NewCommand(app.logger),
+		simulation.NewCommand(app.logger),
 		app.versionCommand(),
 		app.completionCommand(),
 	)

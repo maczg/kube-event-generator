@@ -4,10 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"k8s.io/client-go/kubernetes"
 	"time"
 
-	kube "github.com/maczg/kube-event-generator/pkg/kubernetes"
 	"github.com/maczg/kube-event-generator/pkg/logger"
 	eventscheduler "github.com/maczg/kube-event-generator/pkg/scheduler"
 	v1 "k8s.io/api/core/v1"
@@ -27,21 +27,25 @@ const (
 // PodEvent represents a pod-related event (creation, deletion, etc.)
 type PodEvent struct {
 	*eventscheduler.BaseEvent
+	// Name is the name of the pod event
+	Name string `yaml:"name" json:"name"`
 	// ArrivalTime is the time when the event arrives in the scheduler
 	ArrivalTime EventDuration `yaml:"arrivalTime" json:"arrivalTime"`
 	// EvictTime is the time when the pod should be evicted after creation
 	EvictTime EventDuration `yaml:"evictTime" json:"evictTime"`
-
 	// PodSpec is the specification of the pod to be created or deleted
-	PodSpec *v1.Pod `yaml:"pod" json:"podSpec"`
+	PodSpec *v1.Pod `yaml:"podSpec" json:"podSpec"`
 	// EventType indicates the type of pod event (create or delete)
 	EventType PodEventType `json:"eventType"`
+	// Clientset is the Kubernetes clientset used to interact with the cluster
+	clientset *kubernetes.Clientset
 }
 
 // NewCreatePodEvent creates a new pod creation event
 func NewCreatePodEvent(arrivalTime, evictionTime time.Duration, spec *v1.Pod) *PodEvent {
 	return &PodEvent{
 		BaseEvent: eventscheduler.NewBaseEvent(arrivalTime, evictionTime),
+		Name:      spec.Name,
 		PodSpec:   spec,
 		EventType: PodEventTypeCreate,
 	}
@@ -51,6 +55,7 @@ func NewCreatePodEvent(arrivalTime, evictionTime time.Duration, spec *v1.Pod) *P
 func NewDeletePodEvent(arrivalTime time.Duration, spec *v1.Pod) *PodEvent {
 	return &PodEvent{
 		BaseEvent: eventscheduler.NewBaseEvent(arrivalTime, 0),
+		Name:      spec.Name,
 		PodSpec:   spec,
 		EventType: PodEventTypeDelete,
 	}
@@ -67,6 +72,10 @@ func (e *PodEvent) Execute(ctx context.Context) error {
 
 	if e.PodSpec == nil {
 		return errors.New("pod spec is nil")
+	}
+
+	if e.clientset == nil {
+		return errors.New("clientset is nil")
 	}
 
 	switch e.EventType {
@@ -89,12 +98,9 @@ func (e *PodEvent) Execute(ctx context.Context) error {
 
 // createAndWatch creates a pod and watches for its running state to schedule eviction if needed
 func (e *PodEvent) createAndWatch(ctx context.Context) error {
-	clientset, err := kube.GetClientset()
-	if err != nil {
-		return err
-	}
+	clientset := e.clientset
 
-	_, err = clientset.CoreV1().Pods(e.PodSpec.Namespace).Create(ctx, e.PodSpec, metav1.CreateOptions{})
+	_, err := clientset.CoreV1().Pods(e.PodSpec.Namespace).Create(ctx, e.PodSpec, metav1.CreateOptions{})
 	if err != nil {
 		return err
 	}
@@ -110,23 +116,41 @@ func (e *PodEvent) createAndWatch(ctx context.Context) error {
 	return e.watchAndScheduleEviction(ctx, clientset)
 }
 
+func (e *PodEvent) SetClientset(clientset *kubernetes.Clientset) {
+	e.clientset = clientset
+}
+
 // watchAndScheduleEviction watches for the pod to become running and schedules its eviction
 func (e *PodEvent) watchAndScheduleEviction(ctx context.Context, clientset *kubernetes.Clientset) error {
 	watcher, err := clientset.CoreV1().Pods(e.PodSpec.Namespace).Watch(ctx, metav1.ListOptions{
 		FieldSelector: "metadata.name=" + e.PodSpec.Name,
 	})
 	if err != nil {
+		logger.Default().Warnf("failed to create watcher for pod %s", e.PodSpec.Name)
 		return err
 	}
 	defer watcher.Stop()
 
+	// Set a timeout for waiting for the pod to become running
+	timeout := time.NewTimer(5 * time.Minute)
+	defer timeout.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
-			return errors.New("context canceled while waiting for pod to start")
-		case event := <-watcher.ResultChan():
-			if pod, ok := event.Object.(*v1.Pod); ok && pod.Status.Phase == v1.PodRunning {
-				return e.scheduleEviction(ctx, pod)
+			return fmt.Errorf("context canceled while waiting for pod %s to start: %w", e.PodSpec.Name, ctx.Err())
+		case <-timeout.C:
+			return fmt.Errorf("timeout waiting for pod %s to become running", e.PodSpec.Name)
+		case event, ok := <-watcher.ResultChan():
+			if !ok {
+				err = fmt.Errorf("watch channel closed for pod %s", e.PodSpec.Name)
+				return err
+			}
+			if pod, ok := event.Object.(*v1.Pod); ok {
+				if pod.Status.Phase == v1.PodRunning {
+					logger.Default().Infof("pod %s is running, scheduling eviction", pod.Name)
+					return e.scheduleEviction(ctx, pod)
+				}
 			}
 		}
 	}
@@ -141,6 +165,7 @@ func (e *PodEvent) scheduleEviction(ctx context.Context, pod *v1.Pod) error {
 
 	evictionTime := time.Since(scheduler.StartedAt()) + e.EvictTime.Duration()
 	evictEvent := NewDeletePodEvent(evictionTime, e.PodSpec)
+	evictEvent.SetClientset(e.clientset)
 
 	if err := scheduler.Schedule(evictEvent); err != nil {
 		return err
@@ -152,10 +177,7 @@ func (e *PodEvent) scheduleEviction(ctx context.Context, pod *v1.Pod) error {
 
 // Evict deletes the pod from the cluster
 func (e *PodEvent) Evict(ctx context.Context) error {
-	clientset, err := kube.GetClientset()
-	if err != nil {
-		return err
-	}
+	clientset := e.clientset
 
 	if err := clientset.CoreV1().Pods(e.PodSpec.Namespace).Delete(ctx, e.PodSpec.Name, metav1.DeleteOptions{}); err != nil {
 		return err
@@ -175,14 +197,16 @@ func (e *PodEvent) UnmarshalJSON(data []byte) error {
 		return err
 	}
 
-	*e = PodEvent{
-		BaseEvent: eventscheduler.NewBaseEvent(
-			temp.ArrivalTime.Duration(),
-			temp.EvictTime.Duration(),
-		),
-		PodSpec:   temp.PodSpec,
-		EventType: temp.EventType,
+	if temp.EventType == "" {
+		temp.EventType = PodEventTypeCreate
 	}
+
+	e.Name = temp.Name
+	e.ArrivalTime = temp.ArrivalTime
+	e.EvictTime = temp.EvictTime
+	e.PodSpec = temp.PodSpec
+	e.EventType = temp.EventType
+	e.BaseEvent = eventscheduler.NewBaseEvent(temp.ArrivalTime.Duration(), temp.EvictTime.Duration())
 
 	return nil
 }

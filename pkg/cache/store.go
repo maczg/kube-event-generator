@@ -64,13 +64,11 @@ func (s *Store) Start() {
 
 // Stop stops the store and updates the history with the current state of nodes.
 func (s *Store) Stop() {
-	logger.Default().Info("stopping")
-
 	for _, nodeInfo := range s.nodesInfo {
 		s.stats.UpdateHistory(nodeInfo.Copy())
 	}
-
 	close(s.stopCh)
+	logger.Default().Info("store stopped")
 }
 
 // onAddNode is called when a new node is added to the cluster.
