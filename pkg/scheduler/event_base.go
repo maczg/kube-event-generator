@@ -11,24 +11,25 @@ import (
 
 // BaseEvent provides a basic implementation of SchedulableEvent
 type BaseEvent struct {
-	ID             string        `json:"id"`
-	Status         EventStatus   `json:"status"`
-	ArrivalTime    time.Duration `json:"arrivalTime"`
-	EvictTime      time.Duration `json:"evictTime"`       // Zero value means no eviction
-	ExecuteTimeout time.Duration `json:"execute_timeout"` // Timeout for event execution
-	CreatedAt      time.Time     `json:"created_at"`
-	mu             sync.RWMutex  // Protects Status field
+	ID          string        `json:"id"`
+	Status      EventStatus   `json:"status"`
+	ArrivalTime time.Duration `json:"arrivalTime"`
+	EvictTime   time.Duration `json:"evictTime"` // Zero value means no eviction
+	// Timeout for event execution
+	Timeout   time.Duration `json:"timeout"`
+	CreatedAt time.Time     `json:"createdAt"`
+	mu        sync.RWMutex  // Protects Status field
 }
 
 // NewBaseEvent creates a new BaseEvent with default values
-func NewBaseEvent(arrivalTime time.Duration, evictionTime time.Duration) *BaseEvent {
+func NewBaseEvent(arrivalTime time.Duration, evictionTime time.Duration, timeout time.Duration) *BaseEvent {
 	return &BaseEvent{
-		ID:             uuid.New().String(),
-		Status:         EventStatusPending,
-		ArrivalTime:    arrivalTime,
-		EvictTime:      evictionTime,     // Zero value means no eviction
-		ExecuteTimeout: 30 * time.Second, // Default execution timeout
-		CreatedAt:      time.Now(),
+		ID:          uuid.New().String(),
+		Status:      EventStatusPending,
+		ArrivalTime: arrivalTime,
+		EvictTime:   evictionTime, // Zero value means no eviction
+		Timeout:     timeout,
+		CreatedAt:   time.Now(),
 	}
 }
 
@@ -80,7 +81,7 @@ func (e *BaseEvent) Execute(ctx context.Context) error {
 
 		if scheduler, ok := ctx.Value(SchedulerContextKey).(Scheduler); ok {
 			log.Infof("Scheduling eviction for event %s", e.ID)
-			evictionEvent := NewBaseEvent(e.EvictTime, 0)
+			evictionEvent := NewBaseEvent(e.EvictTime, 0, 30*time.Second)
 
 			if err := scheduler.Schedule(evictionEvent); err != nil {
 				log.Errorf("Failed to schedule eviction event for %s: %v", e.ID, err)
@@ -113,10 +114,10 @@ func (e *BaseEvent) String() string {
 // GetExecuteTimeout returns the execution timeout for the event
 func (e *BaseEvent) GetExecuteTimeout() time.Duration {
 	// Default timeout can be overridden by specific event types
-	return e.ExecuteTimeout
+	return e.Timeout
 }
 
 // SetExecuteTimeout sets the execution timeout for the event
 func (e *BaseEvent) SetExecuteTimeout(timeout time.Duration) {
-	e.ExecuteTimeout = timeout
+	e.Timeout = timeout
 }

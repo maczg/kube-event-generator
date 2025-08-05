@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	kube "github.com/maczg/kube-event-generator/pkg/kubernetes"
+	kube "github.com/maczg/kube-event-generator/pkg/kubeutils"
 	"github.com/maczg/kube-event-generator/pkg/logger"
 	"github.com/maczg/kube-event-generator/pkg/scheduler"
 	"time"
@@ -23,7 +23,7 @@ type KubeSchedulerEvent struct {
 func NewSchedulerEvent(name string, arrivalTime time.Duration, weights map[string]int32, manager kube.SchedulerManager) *KubeSchedulerEvent {
 	return &KubeSchedulerEvent{
 		Name:      name,
-		BaseEvent: scheduler.NewBaseEvent(arrivalTime, 30),
+		BaseEvent: scheduler.NewBaseEvent(arrivalTime, 30, 30*time.Second),
 		Weights:   weights,
 		manager:   manager,
 	}

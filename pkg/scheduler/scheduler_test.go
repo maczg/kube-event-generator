@@ -28,7 +28,7 @@ func TestSchedulerWithEviction(t *testing.T) {
 	// Create a base event with eviction time
 	arrivalTime := 100 * time.Millisecond
 	evictionTime := 500 * time.Millisecond
-	event := NewBaseEvent(arrivalTime, evictionTime)
+	event := NewBaseEvent(arrivalTime, evictionTime, 30*time.Second)
 
 	// Schedule the event
 	err = scheduler.Schedule(event)
@@ -59,7 +59,7 @@ func TestBaseEventEviction(t *testing.T) {
 	// Test BaseEvent with eviction time
 	arrivalTime := 100 * time.Millisecond
 	evictionTime := 500 * time.Millisecond
-	event := NewBaseEvent(arrivalTime, evictionTime)
+	event := NewBaseEvent(arrivalTime, evictionTime, 30*time.Second)
 
 	// Verify initial state
 	assert.NotEmpty(t, event.GetID())
@@ -77,7 +77,7 @@ func TestBaseEventEviction(t *testing.T) {
 func TestBaseEventWithoutEviction(t *testing.T) {
 	// Test BaseEvent without eviction time
 	arrivalTime := 100 * time.Millisecond
-	event := NewBaseEvent(arrivalTime, 0)
+	event := NewBaseEvent(arrivalTime, 0, 30*time.Second)
 
 	// Verify initial state
 	assert.NotEmpty(t, event.GetID())
@@ -105,7 +105,7 @@ func TestBaseEventExecution(t *testing.T) {
 	// Test event execution with eviction
 	arrivalTime := 100 * time.Millisecond
 	evictionTime := 500 * time.Millisecond
-	event := NewBaseEvent(arrivalTime, evictionTime)
+	event := NewBaseEvent(arrivalTime, evictionTime, 30*time.Second)
 
 	// Execute the event
 	err = event.Execute(execCtx)
@@ -124,9 +124,9 @@ func TestBaseEventExecution(t *testing.T) {
 
 func TestEventOrdering(t *testing.T) {
 	// Test that events are ordered correctly by arrival time
-	event1 := NewBaseEvent(100*time.Millisecond, 0)
-	event2 := NewBaseEvent(200*time.Millisecond, 0)
-	event3 := NewBaseEvent(50*time.Millisecond, 0)
+	event1 := NewBaseEvent(100*time.Millisecond, 0, 30*time.Second)
+	event2 := NewBaseEvent(200*time.Millisecond, 0, 30*time.Second)
+	event3 := NewBaseEvent(50*time.Millisecond, 0, 30*time.Second)
 
 	// Test HappensBefore logic
 	assert.True(t, event3.HappensBefore(event1))
@@ -136,7 +136,7 @@ func TestEventOrdering(t *testing.T) {
 
 func TestEventTimeout(t *testing.T) {
 	// Test event execution timeout
-	event := NewBaseEvent(100*time.Millisecond, 0)
+	event := NewBaseEvent(100*time.Millisecond, 0, 30*time.Second)
 
 	// Verify default timeout
 	assert.Equal(t, 30*time.Second, event.GetExecuteTimeout())

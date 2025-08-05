@@ -1,9 +1,12 @@
 package simulation
 
 import (
+	"fmt"
 	"github.com/ghodss/yaml"
+	"github.com/google/uuid"
 	v1 "k8s.io/api/core/v1"
 	"os"
+	"time"
 )
 
 type Metadata struct {
@@ -12,7 +15,7 @@ type Metadata struct {
 	// Description provides a brief description of the scenario
 	Description string `yaml:"description" json:"description"`
 	// CreatedAt is the timestamp when the scenario was created
-	CreatedAt string `yaml:"createdAt" json:"createdAt"`
+	CreatedAt time.Time `yaml:"createdAt" json:"createdAt"`
 }
 
 type Events struct {
@@ -21,16 +24,50 @@ type Events struct {
 }
 
 type Cluster struct {
-	Nodes []*v1.Node `yaml:"nodes" json:"nodes"`
+	Nodes []*v1.Node `yaml:"nodes,omitempty" json:"nodes,omitempty"`
 }
 
 type Scenario struct {
 	// Metadata contains information about the scenario
 	Metadata Metadata `yaml:"metadata" json:"metadata"`
 	// Cluster represents the cluster configuration for the scenario
-	Cluster Cluster `yaml:"cluster" json:"cluster"`
+	Cluster *Cluster `yaml:"cluster,omitempty" json:"cluster,omitempty"`
 	// Events contains the events that will be executed in the scenario
 	Events Events `yaml:"events" json:"events"`
+}
+
+type ScenarioOption func(*Scenario)
+
+func ScenarioWithCluster(cluster *Cluster) ScenarioOption {
+	return func(s *Scenario) {
+		s.Cluster = cluster
+	}
+}
+func ScenarioWithPodsEvents(events []PodEvent) ScenarioOption {
+	return func(s *Scenario) {
+		s.Events.Pods = events
+	}
+}
+
+func ScenarioWithName(name string) ScenarioOption {
+	return func(s *Scenario) {
+		s.Metadata.Name = name
+		s.Metadata.CreatedAt = time.Now()
+	}
+}
+
+func NewScenario(opts ...ScenarioOption) *Scenario {
+	s := &Scenario{
+		Metadata: Metadata{
+			Name:        fmt.Sprintf("scenario-%s", uuid.New().String()[0:3]),
+			Description: "",
+			CreatedAt:   time.Now(),
+		},
+	}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
 }
 
 func Load(data []byte) (*Scenario, error) {
@@ -48,4 +85,18 @@ func LoadFromYaml(filename string) (*Scenario, error) {
 		return nil, err
 	}
 	return Load(data)
+}
+
+func (s *Scenario) ToYaml(filename string) error {
+	file, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	data, err := yaml.Marshal(s)
+	if err != nil {
+		return err
+	}
+	_, err = file.Write(data)
+	return err
 }

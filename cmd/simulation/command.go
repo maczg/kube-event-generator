@@ -1,7 +1,7 @@
 package simulation
 
 import (
-	"github.com/maczg/kube-event-generator/pkg/kubernetes"
+	"github.com/maczg/kube-event-generator/pkg/kubeutils"
 	"github.com/maczg/kube-event-generator/pkg/logger"
 	"github.com/maczg/kube-event-generator/pkg/simulation"
 	"github.com/spf13/cobra"
@@ -40,11 +40,11 @@ func newStartCommand(log *logger.Logger) *cobra.Command {
 				return err
 			}
 
-			clientset, err := kubernetes.GetClientset()
+			clientset, err := kubeutils.GetClientset()
 			if err != nil {
 				return nil
 			}
-			sim := simulation.NewSimulation(scenario, clientset, kubernetes.NewHTTPKubeSchedulerManager("http://localhost:1212"), log)
+			sim := simulation.NewSimulation(scenario, clientset, kubeutils.NewHTTPKubeSchedulerManager("http://localhost:1212"), log)
 			if err := sim.Start(cmd.Context()); err != nil {
 				log.Errorf("failed to start simulation: %v", err)
 				return err

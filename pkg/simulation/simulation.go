@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/maczg/kube-event-generator/pkg/cache"
-	kube "github.com/maczg/kube-event-generator/pkg/kubernetes"
+	kube "github.com/maczg/kube-event-generator/pkg/kubeutils"
 	"github.com/maczg/kube-event-generator/pkg/logger"
 	"github.com/maczg/kube-event-generator/pkg/scheduler"
 	v1 "k8s.io/api/core/v1"

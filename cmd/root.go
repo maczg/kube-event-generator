@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"github.com/sirupsen/logrus"
+	"github.com/maczg/kube-event-generator/pkg/logger"
 	"os"
 )
 
@@ -9,7 +9,7 @@ import (
 func Execute() {
 	app := NewApp()
 	if err := app.Execute(); err != nil {
-		logrus.Errorf("Error executing application: %v", err)
+		logger.Default().Errorf("Error executing application: %v", err)
 		os.Exit(1)
 	}
 }

@@ -33,6 +33,8 @@ type PodEvent struct {
 	ArrivalTime EventDuration `yaml:"arrivalTime" json:"arrivalTime"`
 	// EvictTime is the time when the pod should be evicted after creation
 	EvictTime EventDuration `yaml:"evictTime" json:"evictTime"`
+	// Timeout is the maximum time allowed for the event to execute
+	Timeout EventDuration `yaml:"timeout" json:"timeout"` // Timeout for event execution
 	// PodSpec is the specification of the pod to be created or deleted
 	PodSpec *v1.Pod `yaml:"podSpec" json:"podSpec"`
 	// EventType indicates the type of pod event (create or delete)
@@ -44,20 +46,24 @@ type PodEvent struct {
 // NewCreatePodEvent creates a new pod creation event
 func NewCreatePodEvent(arrivalTime, evictionTime time.Duration, spec *v1.Pod) *PodEvent {
 	return &PodEvent{
-		BaseEvent: eventscheduler.NewBaseEvent(arrivalTime, evictionTime),
-		Name:      spec.Name,
-		PodSpec:   spec,
-		EventType: PodEventTypeCreate,
+		BaseEvent:   eventscheduler.NewBaseEvent(arrivalTime, evictionTime, 30*time.Second),
+		Name:        spec.Name,
+		ArrivalTime: EventDuration(arrivalTime),
+		EvictTime:   EventDuration(evictionTime),
+		PodSpec:     spec,
+		EventType:   PodEventTypeCreate,
+		Timeout:     EventDuration(30 * time.Second),
 	}
 }
 
 // NewDeletePodEvent creates a new pod deletion event
 func NewDeletePodEvent(arrivalTime time.Duration, spec *v1.Pod) *PodEvent {
 	return &PodEvent{
-		BaseEvent: eventscheduler.NewBaseEvent(arrivalTime, 0),
+		BaseEvent: eventscheduler.NewBaseEvent(arrivalTime, 0, 30*time.Second),
 		Name:      spec.Name,
 		PodSpec:   spec,
 		EventType: PodEventTypeDelete,
+		Timeout:   EventDuration(30 * time.Second),
 	}
 }
 
@@ -206,7 +212,7 @@ func (e *PodEvent) UnmarshalJSON(data []byte) error {
 	e.EvictTime = temp.EvictTime
 	e.PodSpec = temp.PodSpec
 	e.EventType = temp.EventType
-	e.BaseEvent = eventscheduler.NewBaseEvent(temp.ArrivalTime.Duration(), temp.EvictTime.Duration())
+	e.BaseEvent = eventscheduler.NewBaseEvent(temp.ArrivalTime.Duration(), temp.EvictTime.Duration(), 30*time.Second)
 
 	return nil
 }
