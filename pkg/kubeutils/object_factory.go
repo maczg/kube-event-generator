@@ -111,11 +111,68 @@ func PodWithNodeAffinity(requiredLabel map[string]string, softLabels map[string]
 	}
 }
 
+func NodeWithMetadata(name string, labels, annotations map[string]string) KubernetesObjectOpt {
+	return func(c KubernetesObjectAdapter) {
+		c.SetName(name)
+		c.SetLabels(labels)
+		c.SetAnnotations(annotations)
+	}
+}
+
+func NodeWithTaints(taints []v1.Taint) KubernetesObjectOpt {
+	return func(obj KubernetesObjectAdapter) {
+		if innerNode, ok := obj.(*node); ok {
+			innerNode.Spec.Taints = taints
+		}
+	}
+}
+
+func NodeWithResource(cpu, memory, pods string) KubernetesObjectOpt {
+	return func(obj KubernetesObjectAdapter) {
+		if innerNode, ok := obj.(*node); ok {
+			innerNode.Status.Capacity = v1.ResourceList{
+				v1.ResourceCPU:    resource.MustParse(cpu),
+				v1.ResourceMemory: resource.MustParse(memory),
+				v1.ResourcePods:   resource.MustParse(pods),
+			}
+			innerNode.Status.Allocatable = innerNode.Status.Capacity
+		}
+	}
+}
+
+func NodeWithLabels(labels map[string]string) KubernetesObjectOpt {
+	return func(obj KubernetesObjectAdapter) {
+		if innerNode, ok := obj.(*node); ok {
+			if innerNode.ObjectMeta.Labels == nil {
+				innerNode.ObjectMeta.Labels = make(map[string]string)
+			}
+			for key, value := range labels {
+				innerNode.ObjectMeta.Labels[key] = value
+			}
+		}
+	}
+}
+
+func NodeWithAnnotations(annotations map[string]string) KubernetesObjectOpt {
+	return func(obj KubernetesObjectAdapter) {
+		if innerNode, ok := obj.(*node); ok {
+			if innerNode.ObjectMeta.Annotations == nil {
+				innerNode.ObjectMeta.Annotations = make(map[string]string)
+			}
+			for key, value := range annotations {
+				innerNode.ObjectMeta.Annotations[key] = value
+			}
+		}
+	}
+}
+
+// ObjectFactory is a singleton that provides methods to create Kubernetes objects like Pods and Nodes.
 var ObjectFactory = &objectFactory{}
 
 type objectFactory struct{}
 
 type pod v1.Pod
+type node v1.Node
 
 func (p *objectFactory) NewPod(opts ...KubernetesObjectOpt) *v1.Pod {
 	newPod := &pod{}
@@ -124,4 +181,12 @@ func (p *objectFactory) NewPod(opts ...KubernetesObjectOpt) *v1.Pod {
 		opt(newPod)
 	}
 	return (*v1.Pod)(newPod)
+}
+
+func (p *objectFactory) NewNode(opts ...KubernetesObjectOpt) *v1.Node {
+	newNode := &node{}
+	for _, opt := range opts {
+		opt(newNode)
+	}
+	return (*v1.Node)(newNode)
 }

@@ -27,6 +27,12 @@ type Cluster struct {
 	Nodes []*v1.Node `yaml:"nodes,omitempty" json:"nodes,omitempty"`
 }
 
+func NewCluster(nodes []*v1.Node) *Cluster {
+	return &Cluster{
+		Nodes: nodes,
+	}
+}
+
 type Scenario struct {
 	// Metadata contains information about the scenario
 	Metadata Metadata `yaml:"metadata,omitempty" json:"metadata,omitempty"`

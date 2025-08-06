@@ -9,11 +9,12 @@ import (
 
 type (
 	Config struct {
-		ScenarioName string     `yaml:"scenarioName" json:"scenarioName"`
-		OutputDir    string     `yaml:"outputDir" json:"outputDir"`
-		OutputPath   string     `yaml:"-" json:"-"`
-		Seed         int64      `yaml:"seed" json:"seed"`
-		Generation   Generation `yaml:"generation" json:"generation"`
+		ScenarioName  string        `yaml:"scenarioName" json:"scenarioName"`
+		OutputDir     string        `yaml:"outputDir" json:"outputDir"`
+		OutputPath    string        `yaml:"-" json:"-"`
+		Seed          int64         `yaml:"seed" json:"seed"`
+		Generation    Generation    `yaml:"generation" json:"generation"`
+		ClusterConfig ClusterConfig `yaml:"clusterConfig" json:"clusterConfig"`
 	}
 
 	Generation struct {
@@ -39,6 +40,14 @@ type (
 		NodeCpuMean int `yaml:"nodeCpuMean" json:"nodeCpuMean"`
 		NodeMemMean int `yaml:"nodeMemMean" json:"nodeMemMean"`
 	}
+
+	ClusterConfig struct {
+		NumNodes    int      `yaml:"numNodes" json:"numNodes"`
+		NodeCpuMean int      `yaml:"nodeCpuMean" json:"nodeCpuMean"`
+		NodeMemMean int      `yaml:"nodeMemMean" json:"nodeMemMean"`
+		NodeLabels  []string `yaml:"nodeLabels" json:"nodeLabels"`
+		NodeTaints  []string `yaml:"nodeTaints" json:"nodeTaints"`
+	}
 )
 
 func GetConfig(configfile string) *Config {
@@ -63,6 +72,13 @@ func GetConfig(configfile string) *Config {
 			NumNodes:            5,
 			NodeCpuMean:         8,
 			NodeMemMean:         16,
+		},
+		ClusterConfig: ClusterConfig{
+			NumNodes:    5,
+			NodeCpuMean: 8,
+			NodeMemMean: 16,
+			NodeLabels:  []string{""},
+			NodeTaints:  []string{""},
 		},
 	}
 

@@ -7,6 +7,7 @@ import (
 	"github.com/maczg/kube-event-generator/pkg/logger"
 	"github.com/maczg/kube-event-generator/pkg/simulation"
 	"github.com/spf13/cobra"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"math/rand"
 	"os"
@@ -38,6 +39,8 @@ func newGenerateScenarioCommand(log *logger.Logger) *cobra.Command {
 			for _, event := range events {
 				scn.Events.Pods = append(scn.Events.Pods, *event)
 			}
+			clusterConfig := generateClusterConfig(log, *cfg)
+			scn.Cluster = clusterConfig
 			return scn.ToYaml(fullPath)
 		},
 	}
@@ -89,4 +92,21 @@ func generatePodEvents(logger *logger.Logger, cfg Config) (events []*simulation.
 		events = append(events, event)
 	}
 	return events
+}
+
+func generateClusterConfig(logger *logger.Logger, cfg Config) *simulation.Cluster {
+	nodes := make([]*v1.Node, 0, cfg.Generation.NumNodes)
+	//rng := rand.New(rand.NewSource(cfg.Seed))
+
+	for i := 0; i < cfg.Generation.NumNodes; i++ {
+		cpuQty := resource.MustParse(fmt.Sprintf("%dm", cfg.Generation.NodeCpuMean*1000))  // e.g. "1000m" for 1 CPU
+		memQty := resource.MustParse(fmt.Sprintf("%dMi", cfg.Generation.NodeMemMean*1024)) // e.g. "2048Mi" for 2Gi
+		node := kubeutils.ObjectFactory.NewNode(
+			kubeutils.NodeWithMetadata(fmt.Sprintf("node-%d", i), nil, nil),
+			kubeutils.NodeWithResource(cpuQty.String(), memQty.String(), "110"),
+		)
+		nodes = append(nodes, node)
+	}
+
+	return simulation.NewCluster(nodes)
 }
