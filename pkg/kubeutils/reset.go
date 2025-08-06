@@ -36,6 +36,30 @@ func ResetPods(ctx context.Context, logger *logger.Logger) error {
 	return nil
 }
 
+func ResetNodes(ctx context.Context, logger *logger.Logger) error {
+	clientset, err := GetClientset()
+	if err != nil {
+		return fmt.Errorf("failed to create clientset: %w", err)
+	}
+	logger.Infof("Resetting nodes in cluster...")
+	// Delete all nodes in the cluster
+	deletePolicy := metav1.DeletePropagationForeground
+	deleteOpts := metav1.DeleteOptions{
+		PropagationPolicy: &deletePolicy,
+	}
+	nodes, err := clientset.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to list nodes: %w", err)
+	}
+	for _, n := range nodes.Items {
+		logger.Debugf("Deleting node: %s", n.Name)
+		if err := clientset.CoreV1().Nodes().Delete(ctx, n.Name, deleteOpts); err != nil {
+			logger.Warnf("Failed to delete node %s: %v", n.Name, err)
+		}
+	}
+	return nil
+}
+
 // ResetKubeSchedulerWeights resets the weights of all scheduler plugins to their default values.
 func ResetKubeSchedulerWeights(ctx context.Context, logger *logger.Logger, schedulerUrl string) error {
 	logger.Infof("Resetting scheduler plugin weights...")
