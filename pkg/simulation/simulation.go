@@ -107,8 +107,12 @@ func (s *simulation) Start(ctx context.Context) error {
 }
 
 func (s *simulation) Stop(ctx context.Context) error {
-	<-s.stopCh
-	return nil
+	select {
+	case s.stopCh <- struct{}{}:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func (s *simulation) GetID() string {
@@ -152,6 +156,7 @@ func (s *simulation) loadEvents() error {
 
 	if s.scenario.Events.Scheduler != nil {
 		for _, event := range s.scenario.Events.Scheduler {
+			event.SetManager(s.schedulerManager)
 			if err := s.scheduler.Schedule(&event); err != nil {
 				s.logger.Errorln(err)
 				return err

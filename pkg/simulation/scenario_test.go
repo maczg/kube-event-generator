@@ -48,3 +48,37 @@ func TestLoadFromYaml(t *testing.T) {
 	assert.Equal(t, "128Mi", scenario.Events.Pods[0].PodSpec.Spec.Containers[0].Resources.Limits.Memory().String())
 
 }
+
+var schedulerEventYaml = `
+metadata:
+  name: weights
+events:
+  scheduler:
+    - name: favour-fit
+      arrivalTime: 30s
+      weights:
+        NodeResourcesFit: 5
+        NodeResourcesBalancedAllocation: 1
+`
+
+func TestLoadSchedulerEvents(t *testing.T) {
+	scenario, err := Load([]byte(schedulerEventYaml))
+	assert.NoError(t, err)
+	assert.Len(t, scenario.Events.Scheduler, 1)
+
+	event := scenario.Events.Scheduler[0]
+	assert.NotNil(t, event.BaseEvent)
+	assert.Equal(t, "favour-fit", event.GetName())
+	assert.Equal(t, 30*time.Second, event.Arrival())
+	assert.Equal(t, int32(5), event.Weights["NodeResourcesFit"])
+}
+
+func TestLoadSchedulerEventWithoutWeights(t *testing.T) {
+	_, err := Load([]byte(`
+events:
+  scheduler:
+    - name: empty
+      arrivalTime: 10s
+`))
+	assert.Error(t, err)
+}

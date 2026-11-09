@@ -1,6 +1,9 @@
 package simulation
 
 import (
+	"context"
+	"time"
+
 	"github.com/maczg/kube-event-generator/pkg/kubeutils"
 	"github.com/maczg/kube-event-generator/pkg/logger"
 	"github.com/maczg/kube-event-generator/pkg/simulation"
@@ -27,6 +30,8 @@ func NewCommand(log *logger.Logger) *cobra.Command {
 func newStartCommand(log *logger.Logger) *cobra.Command {
 	var scenarioFile string
 	var saveMetrics bool
+	var schedulerURL string
+	var timeout time.Duration
 
 	cmd := &cobra.Command{
 		Use:   "start",
@@ -42,10 +47,19 @@ func newStartCommand(log *logger.Logger) *cobra.Command {
 
 			clientset, err := kubeutils.GetClientset()
 			if err != nil {
-				return nil
+				log.Errorf("failed to create kubernetes client: %v", err)
+				return err
 			}
-			sim := simulation.NewSimulation(scenario, clientset, kubeutils.NewHTTPKubeSchedulerManager("http://localhost:1212"), log)
-			if err := sim.Start(cmd.Context()); err != nil {
+
+			ctx := cmd.Context()
+			if timeout > 0 {
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithTimeout(ctx, timeout)
+				defer cancel()
+			}
+
+			sim := simulation.NewSimulation(scenario, clientset, kubeutils.NewHTTPKubeSchedulerManager(schedulerURL), log)
+			if err := sim.Start(ctx); err != nil {
 				log.Errorf("failed to start simulation: %v", err)
 				return err
 			}
@@ -61,6 +75,8 @@ func newStartCommand(log *logger.Logger) *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&scenarioFile, "scenario", "scenario.yaml", "Path to the scenario file (YAML format)")
-	cmd.Flags().BoolVar(&saveMetrics, "metrics", true, "Enable metrics")
+	cmd.Flags().BoolVar(&saveMetrics, "metrics", true, "Export metrics as CSV under results/")
+	cmd.Flags().StringVar(&schedulerURL, "scheduler-url", "http://localhost:1212/api/v1/schedulerconfiguration", "URL of the kube-scheduler-simulator configuration API, used by scheduler events")
+	cmd.Flags().DurationVar(&timeout, "timeout", 0, "Stop the simulation after this wall-clock time even if pods are still pending (0 means no limit)")
 	return cmd
 }
