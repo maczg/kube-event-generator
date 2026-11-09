@@ -146,3 +146,36 @@ func TestEventTimeout(t *testing.T) {
 	event.SetExecuteTimeout(customTimeout)
 	assert.Equal(t, customTimeout, event.GetExecuteTimeout())
 }
+
+// blockingEvent waits until its context is done, like a pod that stays pending.
+type blockingEvent struct {
+	*BaseEvent
+}
+
+func (e *blockingEvent) Execute(ctx context.Context) error {
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+func TestBlockingEventDoesNotDelayLaterEvents(t *testing.T) {
+	s := New(logger.Default())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	require.NoError(t, s.Start(ctx))
+
+	blocking := &blockingEvent{BaseEvent: NewBaseEvent(0, 0, 30*time.Second)}
+	later := NewBaseEvent(100*time.Millisecond, 0, 30*time.Second)
+
+	require.NoError(t, s.Schedule(blocking))
+	require.NoError(t, s.Schedule(later))
+
+	assert.Eventually(t, func() bool {
+		return later.GetStatus() == EventStatusCompleted
+	}, time.Second, 20*time.Millisecond, "an event that waits must not delay the events after it")
+
+	// Stop cancels the blocking event and waits for it to return.
+	require.NoError(t, s.Stop())
+	assert.Equal(t, EventStatusFailed, blocking.GetStatus())
+}

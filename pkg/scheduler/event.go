@@ -24,6 +24,9 @@ type SchedulableEvent interface {
 	Arrival() time.Duration
 	Eviction() time.Duration
 	Execute(ctx context.Context) error
+	// GetExecuteTimeout bounds the API calls an event makes. The scheduler
+	// runs every event in its own goroutine with a context that lasts as
+	// long as the scheduler.
 	GetExecuteTimeout() time.Duration
 	SetExecuteTimeout(timeout time.Duration)
 	HappensBefore(other SchedulableEvent) bool

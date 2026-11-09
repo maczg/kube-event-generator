@@ -12,6 +12,7 @@ import (
 	eventscheduler "github.com/maczg/kube-event-generator/pkg/scheduler"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/watch"
 )
 
 // PodEventType represents the type of pod event
@@ -102,11 +103,15 @@ func (e *PodEvent) Execute(ctx context.Context) error {
 	return nil
 }
 
-// createAndWatch creates a pod and watches for its running state to schedule eviction if needed
+// createAndWatch creates a pod and, when the pod has an eviction time, waits
+// for it to run and schedules its eviction.
 func (e *PodEvent) createAndWatch(ctx context.Context) error {
 	clientset := e.clientset
 
-	_, err := clientset.CoreV1().Pods(e.PodSpec.Namespace).Create(ctx, e.PodSpec, metav1.CreateOptions{})
+	createCtx, cancel := context.WithTimeout(ctx, e.GetExecuteTimeout())
+	defer cancel()
+
+	created, err := clientset.CoreV1().Pods(e.PodSpec.Namespace).Create(createCtx, e.PodSpec, metav1.CreateOptions{})
 	if err != nil {
 		return err
 	}
@@ -119,51 +124,90 @@ func (e *PodEvent) createAndWatch(ctx context.Context) error {
 	}
 
 	// Watch for pod to become running, then schedule eviction
-	return e.watchAndScheduleEviction(ctx, clientset)
+	return e.watchAndScheduleEviction(ctx, clientset, created.ResourceVersion)
 }
 
 func (e *PodEvent) SetClientset(clientset *kubernetes.Clientset) {
 	e.clientset = clientset
 }
 
-// watchAndScheduleEviction watches for the pod to become running and schedules its eviction
-func (e *PodEvent) watchAndScheduleEviction(ctx context.Context, clientset *kubernetes.Clientset) error {
-	watcher, err := clientset.CoreV1().Pods(e.PodSpec.Namespace).Watch(ctx, metav1.ListOptions{
-		FieldSelector: "metadata.name=" + e.PodSpec.Name,
-	})
-	if err != nil {
-		logger.Default().Warnf("failed to create watcher for pod %s", e.PodSpec.Name)
-		return err
+// watchAndScheduleEviction waits until the pod is running and schedules its
+// eviction EvictTime later, so that the run time starts at placement and the
+// time spent pending is not counted.
+//
+// The watch starts from the resource version returned by the create call:
+// a pod on a simulated node can be bound and running a few milliseconds after
+// creation, and a watch that starts later would miss the transition. The wait
+// has no deadline of its own, since a pod may stay pending for a long time in
+// a saturated cluster; it ends when the pod runs, is deleted, or ctx is done.
+func (e *PodEvent) watchAndScheduleEviction(ctx context.Context, clientset *kubernetes.Clientset, resourceVersion string) error {
+	pods := clientset.CoreV1().Pods(e.PodSpec.Namespace)
+
+	for {
+		watcher, err := pods.Watch(ctx, metav1.ListOptions{
+			FieldSelector:   "metadata.name=" + e.PodSpec.Name,
+			ResourceVersion: resourceVersion,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to watch pod %s: %w", e.PodSpec.Name, err)
+		}
+
+		running, err := waitForRunning(ctx, watcher, e.PodSpec.Name)
+		watcher.Stop()
+
+		if err != nil {
+			return err
+		}
+
+		if running {
+			return e.scheduleEviction(ctx)
+		}
+
+		// The watch ended without a verdict (closed by the server or expired
+		// resource version): read the current state and resume from there.
+		pod, err := pods.Get(ctx, e.PodSpec.Name, metav1.GetOptions{})
+		if err != nil {
+			return fmt.Errorf("failed to get pod %s: %w", e.PodSpec.Name, err)
+		}
+
+		if pod.Status.Phase == v1.PodRunning {
+			return e.scheduleEviction(ctx)
+		}
+
+		resourceVersion = pod.ResourceVersion
 	}
-	defer watcher.Stop()
+}
 
-	// Set a timeout for waiting for the pod to become running
-	timeout := time.NewTimer(5 * time.Minute)
-	defer timeout.Stop()
-
+// waitForRunning consumes watch events until the pod is running (true), the
+// watch ends without a verdict (false), or the pod is deleted or ctx is done
+// (error).
+func waitForRunning(ctx context.Context, watcher watch.Interface, name string) (bool, error) {
 	for {
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("context canceled while waiting for pod %s to start: %w", e.PodSpec.Name, ctx.Err())
-		case <-timeout.C:
-			return fmt.Errorf("timeout waiting for pod %s to become running", e.PodSpec.Name)
+			return false, fmt.Errorf("context done while waiting for pod %s to start: %w", name, ctx.Err())
 		case event, ok := <-watcher.ResultChan():
 			if !ok {
-				err = fmt.Errorf("watch channel closed for pod %s", e.PodSpec.Name)
-				return err
+				return false, nil
 			}
-			if pod, ok := event.Object.(*v1.Pod); ok {
-				if pod.Status.Phase == v1.PodRunning {
-					logger.Default().Infof("pod %s is running, scheduling eviction", pod.Name)
-					return e.scheduleEviction(ctx, pod)
-				}
+
+			switch event.Type {
+			case watch.Error:
+				return false, nil
+			case watch.Deleted:
+				return false, fmt.Errorf("pod %s deleted before running", name)
+			}
+
+			if pod, ok := event.Object.(*v1.Pod); ok && pod.Status.Phase == v1.PodRunning {
+				logger.Default().Infof("pod %s is running on %s, scheduling eviction", pod.Name, pod.Spec.NodeName)
+				return true, nil
 			}
 		}
 	}
 }
 
-// scheduleEviction schedules the eviction of a running pod
-func (e *PodEvent) scheduleEviction(ctx context.Context, pod *v1.Pod) error {
+// scheduleEviction schedules the deletion of the running pod EvictTime from now.
+func (e *PodEvent) scheduleEviction(ctx context.Context) error {
 	scheduler, ok := ctx.Value(eventscheduler.SchedulerContextKey).(eventscheduler.Scheduler)
 	if !ok {
 		return errors.New("scheduler not found in context")
@@ -177,7 +221,7 @@ func (e *PodEvent) scheduleEviction(ctx context.Context, pod *v1.Pod) error {
 		return err
 	}
 
-	logger.Default().Debugf("scheduled eviction for pod %s at %s", pod.Name, evictionTime)
+	logger.Default().Debugf("scheduled eviction for pod %s at %s", e.PodSpec.Name, evictionTime)
 	return nil
 }
 
@@ -185,7 +229,10 @@ func (e *PodEvent) scheduleEviction(ctx context.Context, pod *v1.Pod) error {
 func (e *PodEvent) Evict(ctx context.Context) error {
 	clientset := e.clientset
 
-	if err := clientset.CoreV1().Pods(e.PodSpec.Namespace).Delete(ctx, e.PodSpec.Name, metav1.DeleteOptions{}); err != nil {
+	deleteCtx, cancel := context.WithTimeout(ctx, e.GetExecuteTimeout())
+	defer cancel()
+
+	if err := clientset.CoreV1().Pods(e.PodSpec.Namespace).Delete(deleteCtx, e.PodSpec.Name, metav1.DeleteOptions{}); err != nil {
 		return err
 	}
 

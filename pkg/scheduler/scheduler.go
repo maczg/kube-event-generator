@@ -41,6 +41,8 @@ type scheduler struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 	done   chan struct{}
+	// inflight tracks events that are still executing.
+	inflight sync.WaitGroup
 }
 
 // New creates a new scheduler
@@ -93,25 +95,30 @@ func (s *scheduler) ResetStartTime() error {
 	return nil
 }
 
-// Stop gracefully stops the scheduler
+// Stop gracefully stops the scheduler. It cancels the scheduler context and
+// waits for the loop and for every event still executing to return.
+// The lock is released before waiting, because executing events read the
+// start time.
 func (s *scheduler) Stop() error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	if !s.running {
+		s.mu.Unlock()
 		return ErrSchedulerNotStarted
 	}
 
 	s.logger.Info("stopping scheduler")
 	s.running = false
+	cancel := s.cancel
+	s.mu.Unlock()
 
 	// Cancel context to signal stop
-	if s.cancel != nil {
-		s.cancel()
+	if cancel != nil {
+		cancel()
 	}
 
-	// Wait for scheduler loop to finish
+	// Wait for the scheduler loop and the in-flight events to finish
 	<-s.done
+	s.inflight.Wait()
 
 	s.logger.Info("scheduler stopped")
 	return nil
@@ -150,7 +157,7 @@ func (s *scheduler) StartedAt() time.Time {
 func (s *scheduler) schedulerLoop() {
 	defer close(s.done)
 
-	ticker := time.NewTicker(100 * time.Millisecond) // Check every 100ms
+	ticker := time.NewTicker(10 * time.Millisecond) // arrival times are honoured within 10ms
 	defer ticker.Stop()
 
 	for {
@@ -179,12 +186,18 @@ func (s *scheduler) processReadyEvents() {
 			break
 		}
 
-		// Remove event from queue and execute it
+		// Remove event from queue and execute it without blocking the loop:
+		// an event that waits on the cluster (a pod waiting to be scheduled)
+		// must not delay the events that arrive after it.
 		event, err = s.queue.PopEvent()
 		if err != nil {
 			break
 		}
-		s.executeEvent(event)
+		s.inflight.Add(1)
+		go func(ev SchedulableEvent) {
+			defer s.inflight.Done()
+			s.executeEvent(ev)
+		}(event)
 	}
 }
 
@@ -192,10 +205,10 @@ func (s *scheduler) processReadyEvents() {
 func (s *scheduler) executeEvent(event SchedulableEvent) {
 	s.logger.Debugf("executing event: %s", event.GetID())
 
-	// Create execution context with timeout and inject scheduler
+	// Inject the scheduler into the execution context. The context lives as
+	// long as the scheduler: each event bounds its own API calls with
+	// GetExecuteTimeout, while waits on cluster state end when the scheduler stops.
 	ctx := context.WithValue(s.ctx, SchedulerContextKey, s)
-	ctx, cancel := context.WithTimeout(ctx, event.GetExecuteTimeout())
-	defer cancel()
 
 	// Execute the event
 	if err := event.Execute(ctx); err != nil {
