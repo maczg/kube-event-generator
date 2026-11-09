@@ -1,12 +1,17 @@
+# Example configuration for `keg scenario generate --config config.yaml`.
 generation:
   numPodEvents: 100
+  # Exponential inter-arrival times with rate arrivalScale, multiplied by arrivalScaleFactor seconds.
   arrivalScale: 2.0
-  arrivalScaleFactor:  5.0
-  durationScale: 1.5
-  durationShape: 2.0
+  arrivalScaleFactor: 5.0
+  # Run time: Weibull(shape, scale) multiplied by durationScaleFactor seconds.
+  durationShape: 1.5
+  durationScale: 2.0
   durationScaleFactor: 10.0
+  # CPU request in cores: Weibull(shape, scale).
   podCpuShape: 3.0
-  podCpuFactor: 1.0
-  podMemScale: 2.0
-  podMemShape: 512.0
+  podCpuScale: 1.0
+  # Memory request in MiB: Weibull(shape, scale) multiplied by podMemFactor.
+  podMemShape: 2.0
+  podMemScale: 512.0
   podMemFactor: 1.0
