@@ -4,6 +4,7 @@ import (
 	"github.com/ghodss/yaml"
 	"github.com/stretchr/testify/assert"
 	"testing"
+	"time"
 )
 
 var scenarioYaml = `
@@ -36,11 +37,11 @@ func TestLoadFromYaml(t *testing.T) {
 	assert.NoError(t, err, "Failed to unmarshal scenario YAML")
 
 	assert.Equal(t, scenario.Metadata.Name, "test-scenario")
-	assert.Equal(t, scenario.Metadata.CreatedAt, "2023-10-01T00:00:00Z")
+	assert.Equal(t, time.Date(2023, time.October, 1, 0, 0, 0, 0, time.UTC), scenario.Metadata.CreatedAt.UTC())
 	assert.Equal(t, scenario.Metadata.Description, "This is a test scenario")
 	assert.Len(t, scenario.Events.Pods, 1)
-	assert.Equal(t, scenario.Events.Pods[0].PodSpec.ObjectMeta.Name, "test-pod")
-	assert.Equal(t, scenario.Events.Pods[0].PodSpec.ObjectMeta.Namespace, "default")
+	assert.Equal(t, scenario.Events.Pods[0].PodSpec.Name, "test-pod")
+	assert.Equal(t, scenario.Events.Pods[0].PodSpec.Namespace, "default")
 	assert.Equal(t, scenario.Events.Pods[0].PodSpec.Spec.Containers[0].Name, "test-container")
 	assert.Equal(t, scenario.Events.Pods[0].PodSpec.Spec.Containers[0].Image, "nginx")
 	assert.Equal(t, "100m", scenario.Events.Pods[0].PodSpec.Spec.Containers[0].Resources.Limits.Cpu().String())

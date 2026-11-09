@@ -181,10 +181,11 @@ func (s *simulation) podWatcher(ctx context.Context) {
 		case <-ctx.Done():
 			s.logger.Infoln("context done, stopping pod watcher")
 			return
-		case <-s.errCh:
-			s.logger.Infoln("error channel closed, stopping pod watcher")
-			return
-		case event := <-watcher.ResultChan():
+		case event, ok := <-watcher.ResultChan():
+			if !ok {
+				s.logger.Warnln("pod watch channel closed, stopping pod watcher")
+				return
+			}
 			if pod, ok := event.Object.(*v1.Pod); ok {
 				switch event.Type {
 				case watch.Deleted:

@@ -97,9 +97,10 @@ func getNodeRoles(node *v1.Node) string {
 	roles := []string{}
 
 	for label := range node.Labels {
-		if label == "node-role.kubernetes.io/master" || label == "node-role.kubernetes.io/control-plane" {
+		switch label {
+		case "node-role.kubernetes.io/master", "node-role.kubernetes.io/control-plane":
 			roles = append(roles, "control-plane")
-		} else if label == "node-role.kubernetes.io/worker" {
+		case "node-role.kubernetes.io/worker":
 			roles = append(roles, "worker")
 		}
 	}

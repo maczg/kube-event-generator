@@ -211,9 +211,9 @@ func (s *Stats) ExportCSV(dir string) error {
 		return err
 	}
 
-	defer filePendingDurations.Close()
-	defer fileRunningDurations.Close()
-	defer fileQueueLength.Close()
+	defer func() { _ = filePendingDurations.Close() }()
+	defer func() { _ = fileRunningDurations.Close() }()
+	defer func() { _ = fileQueueLength.Close() }()
 
 	// Export the pending times
 	header := []string{"pod_uid", "pod_name", "pending_time_milliseconds"}
@@ -382,7 +382,7 @@ func (s *Stats) ExportCSV(dir string) error {
 		return err
 	}
 
-	defer fileEventHistory.Close()
+	defer func() { _ = fileEventHistory.Close() }()
 	writer = csv.NewWriter(fileEventHistory)
 	header = []string{"timestamp", "pod_name", "node_name", "phase", "event_type", "cpu_req", "mem_req"}
 

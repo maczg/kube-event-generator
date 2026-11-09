@@ -92,7 +92,7 @@ func (s *Scenario) ToYaml(filename string) error {
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	data, err := yaml.Marshal(s)
 	if err != nil {
 		return err

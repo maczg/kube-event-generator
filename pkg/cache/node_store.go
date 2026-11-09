@@ -161,7 +161,7 @@ func (ns *NodeStore) deletePod(pod *v1.Pod) {
 func (ns *NodeStore) String() string {
 	var builder strings.Builder
 
-	builder.WriteString(fmt.Sprintf("[%s|cpu %s|mem %s] ", ns.Node.Name, ns.Allocated.Cpu().String(), ns.Allocated.Memory().String()))
+	fmt.Fprintf(&builder, "[%s|cpu %s|mem %s] ", ns.Node.Name, ns.Allocated.Cpu().String(), ns.Allocated.Memory().String())
 
 	return builder.String()
 }
