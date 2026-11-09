@@ -303,6 +303,7 @@ func (s *Stats) ExportCSV(dir string) error {
 		for resourceType := range resourceTypes {
 			header = append(header, string(resourceType))
 		}
+		sort.Strings(header[1:])
 
 		if err = writer.Write(header); err != nil {
 			return err
@@ -344,6 +345,7 @@ func (s *Stats) ExportCSV(dir string) error {
 		for resourceType := range resourceTypes {
 			header = append(header, string(resourceType))
 		}
+		sort.Strings(header[1:])
 
 		if err = writer.Write(header); err != nil {
 			return err
@@ -385,6 +387,7 @@ func (s *Stats) ExportCSV(dir string) error {
 		for resourceType := range resourceTypes {
 			header = append(header, string(resourceType))
 		}
+		sort.Strings(header[1:])
 
 		if err = writer.Write(header); err != nil {
 			return err
