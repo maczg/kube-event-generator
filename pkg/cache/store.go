@@ -124,6 +124,7 @@ func (s *Store) addPod(obj interface{}) {
 
 	if nodeName := pod.Spec.NodeName; nodeName != "" {
 		logger.Default().Debugf("[onAdd] pod %s added to node %s", pod.Name, nodeName)
+		s.stats.MarkRunning(pod)
 
 		if nodeInfo, ok := s.nodesInfo[nodeName]; ok {
 			nodeInfo.addPod(pod)
@@ -138,10 +139,10 @@ func (s *Store) updatePod(oldObj, newObj interface{}) {
 	oldPodNodeName := oldPod.Spec.NodeName
 	newPodNodeName := newPod.Spec.NodeName
 
-	s.stats.UpdatePodEvent(NewPodEvent(newPod, "update"))
-
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	s.stats.UpdatePodEvent(NewPodEvent(newPod, "update"))
 
 	if newPod.Status.Phase == v1.PodPending {
 		if _, ok := s.stats.PendingQ[NewKey(newPod)]; !ok {
@@ -155,6 +156,7 @@ func (s *Store) updatePod(oldObj, newObj interface{}) {
 		if oldPodNodeName == "" && newPodNodeName != "" {
 			logger.Default().Debugf("[onUpdate] %s is now on %s, removing from pending queue", oldPod.Name, newPodNodeName)
 			s.stats.UpdatePendingQ(oldPod, RemovePodFromPendingQ)
+			s.stats.MarkRunning(newPod)
 
 			if nodeInfo, ok := s.nodesInfo[newPodNodeName]; ok {
 				nodeInfo.addPod(newPod)
@@ -188,11 +190,22 @@ func (s *Store) updatePod(oldObj, newObj interface{}) {
 }
 
 func (s *Store) deletePod(obj interface{}) {
-	pod := obj.(*v1.Pod)
-	s.stats.UpdatePodEvent(NewPodEvent(pod, "delete"))
+	pod, ok := obj.(*v1.Pod)
+	if !ok {
+		// The informer may deliver a tombstone for a pod deleted while disconnected.
+		tombstone, isTombstone := obj.(cc.DeletedFinalStateUnknown)
+		if !isTombstone {
+			return
+		}
+		if pod, ok = tombstone.Obj.(*v1.Pod); !ok {
+			return
+		}
+	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	s.stats.UpdatePodEvent(NewPodEvent(pod, "delete"))
 	logger.Default().Debugf("[onDelete] pod %s deleted", pod.Name)
 
 	key := NewKey(pod)
@@ -202,7 +215,7 @@ func (s *Store) deletePod(obj interface{}) {
 		logger.Default().Debugf("[onDelete] running pod %s delete", pod.Name)
 
 		if nodeName := pod.Spec.NodeName; nodeName != "" {
-			s.stats.RunningDurations[key] = time.Since(pod.GetCreationTimestamp().Time)
+			s.stats.RunningDurations[key] = s.stats.RunningDuration(pod)
 			if nodeInfo, ok := s.nodesInfo[nodeName]; ok {
 				nodeInfo.deletePod(pod)
 				s.stats.UpdateHistory(nodeInfo.Copy())

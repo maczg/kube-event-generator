@@ -9,6 +9,7 @@ import (
 	"time"
 
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 const (
@@ -66,6 +67,10 @@ type Stats struct {
 	PendingQHistory []Record[int]
 	// PendingDurations is a map of pod to the time the pod spent in the pending queue.
 	PendingDurations map[Key]time.Duration
+	// PendingSince records when each pod was first observed pending.
+	PendingSince map[Key]time.Time
+	// RunningSince records when each pod was first observed bound to a node.
+	RunningSince map[Key]time.Time
 	// ExecutionDuration is a map of pod to the time the pod spent running.
 	RunningDurations map[Key]time.Duration
 
@@ -82,6 +87,8 @@ func NewStats() *Stats {
 	return &Stats{
 		PendingQ:               make(map[Key]*v1.Pod),
 		PendingDurations:       make(map[Key]time.Duration),
+		PendingSince:           make(map[Key]time.Time),
+		RunningSince:           make(map[Key]time.Time),
 		RunningDurations:       make(map[Key]time.Duration),
 		PendingQHistory:        make([]Record[int], 0),
 		AllocationHistory:      make(map[Key][]Record[v1.ResourceList]),
@@ -140,11 +147,20 @@ func (s *Stats) UpdateHistory(nodeStore NodeStore) {
 func (s *Stats) UpdatePendingQ(pod *v1.Pod, action PendingQAction) {
 	key := NewKey(pod)
 
+	// Durations are measured from the moment the informer observes a state,
+	// because metav1.Time timestamps have a resolution of one second.
 	switch action {
 	case AddPodToPendingQ:
 		s.PendingQ[key] = pod
+		if _, ok := s.PendingSince[key]; !ok {
+			s.PendingSince[key] = time.Now()
+		}
 	case RemovePodFromPendingQ:
-		s.PendingDurations[key] = time.Since(pod.CreationTimestamp.Time)
+		if since, ok := s.PendingSince[key]; ok {
+			s.PendingDurations[key] = time.Since(since)
+		} else {
+			s.PendingDurations[key] = time.Since(pod.CreationTimestamp.Time)
+		}
 		delete(s.PendingQ, key)
 	}
 
@@ -152,6 +168,24 @@ func (s *Stats) UpdatePendingQ(pod *v1.Pod, action PendingQAction) {
 		Value: len(s.PendingQ),
 		At:    time.Now(),
 	})
+}
+
+// MarkRunning records the first time a pod is observed bound to a node.
+func (s *Stats) MarkRunning(pod *v1.Pod) {
+	key := NewKey(pod)
+	if _, ok := s.RunningSince[key]; !ok {
+		s.RunningSince[key] = time.Now()
+	}
+}
+
+// RunningDuration returns how long a pod has been bound to a node, falling
+// back to its creation timestamp when the binding was not observed.
+func (s *Stats) RunningDuration(pod *v1.Pod) time.Duration {
+	if since, ok := s.RunningSince[NewKey(pod)]; ok {
+		return time.Since(since)
+	}
+
+	return time.Since(pod.CreationTimestamp.Time)
 }
 
 func (s *Stats) GetPodQueueHistory() []Record[int] {
@@ -280,7 +314,7 @@ func (s *Stats) ExportCSV(dir string) error {
 
 			for i, resourceType := range header[1:] {
 				if quantity, ok := record.Value[v1.ResourceName(resourceType)]; ok {
-					row[i+1] = strconv.FormatInt(quantity.MilliValue(), 10)
+					row[i+1] = formatQuantity(v1.ResourceName(resourceType), quantity)
 				} else {
 					row[i+1] = "0"
 				}
@@ -362,7 +396,7 @@ func (s *Stats) ExportCSV(dir string) error {
 
 			for i, resourceType := range header[1:] {
 				if quantity, ok := record.Value[v1.ResourceName(resourceType)]; ok {
-					row[i+1] = strconv.FormatInt(quantity.MilliValue(), 10)
+					row[i+1] = formatQuantity(v1.ResourceName(resourceType), quantity)
 				} else {
 					row[i+1] = "0"
 				}
@@ -408,4 +442,14 @@ func (s *Stats) ExportCSV(dir string) error {
 	writer.Flush()
 
 	return nil
+}
+
+// formatQuantity writes CPU in millicores and every other resource (memory
+// in bytes, pods as a count) in its base unit.
+func formatQuantity(name v1.ResourceName, quantity resource.Quantity) string {
+	if name == v1.ResourceCPU {
+		return strconv.FormatInt(quantity.MilliValue(), 10)
+	}
+
+	return strconv.FormatInt(quantity.Value(), 10)
 }
