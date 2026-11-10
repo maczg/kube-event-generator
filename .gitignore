@@ -6,6 +6,7 @@ results/*
 # Generated scenarios: only the examples are versioned.
 scenarios/*
 !scenarios/scenario.example.yaml
+!scenarios/nodes.example.yaml
 !scenarios/motivation/
 ignore
 bin/

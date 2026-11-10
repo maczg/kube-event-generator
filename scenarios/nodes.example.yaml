@@ -1,0 +1,91 @@
+apiVersion: v1
+kind: Node
+metadata:
+  name: cpu-1
+  annotations:
+    node.alpha.kubernetes.io/ttl: "0"
+    kwok.x-k8s.io/node: fake
+  labels:
+    type: kwok
+    kubernetes.io/hostname: cpu-1
+    kubernetes.io/os: linux
+    kubernetes.io/arch: amd64
+    node-class: cpu
+status:
+  allocatable:
+    cpu: "8"
+    memory: 16Gi
+    pods: "110"
+  capacity:
+    cpu: "8"
+    memory: 16Gi
+    pods: "110"
+---
+apiVersion: v1
+kind: Node
+metadata:
+  name: cpu-2
+  annotations:
+    node.alpha.kubernetes.io/ttl: "0"
+    kwok.x-k8s.io/node: fake
+  labels:
+    type: kwok
+    kubernetes.io/hostname: cpu-2
+    kubernetes.io/os: linux
+    kubernetes.io/arch: amd64
+    node-class: cpu
+status:
+  allocatable:
+    cpu: "8"
+    memory: 16Gi
+    pods: "110"
+  capacity:
+    cpu: "8"
+    memory: 16Gi
+    pods: "110"
+---
+apiVersion: v1
+kind: Node
+metadata:
+  name: mem-1
+  annotations:
+    node.alpha.kubernetes.io/ttl: "0"
+    kwok.x-k8s.io/node: fake
+  labels:
+    type: kwok
+    kubernetes.io/hostname: mem-1
+    kubernetes.io/os: linux
+    kubernetes.io/arch: amd64
+    node-class: mem
+status:
+  allocatable:
+    cpu: "4"
+    memory: 32Gi
+    pods: "110"
+  capacity:
+    cpu: "4"
+    memory: 32Gi
+    pods: "110"
+---
+apiVersion: v1
+kind: Node
+metadata:
+  name: mem-2
+  annotations:
+    node.alpha.kubernetes.io/ttl: "0"
+    kwok.x-k8s.io/node: fake
+  labels:
+    type: kwok
+    kubernetes.io/hostname: mem-2
+    kubernetes.io/os: linux
+    kubernetes.io/arch: amd64
+    node-class: mem
+status:
+  allocatable:
+    cpu: "4"
+    memory: 32Gi
+    pods: "110"
+  capacity:
+    cpu: "4"
+    memory: 32Gi
+    pods: "110"
