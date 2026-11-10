@@ -24,7 +24,7 @@ This document provides guidelines and instructions for contributing to the proje
 
 ### Prerequisites
 
-- Go 1.21 or later
+- Go 1.24 or later
 - Docker (for local testing environment)
 - Make
 - golangci-lint (for code linting)
@@ -38,14 +38,14 @@ make build
 # Run unit tests
 make test-unit
 
-# Run all tests (including integration tests)
+# Run all tests (integration tests are not implemented yet)
 make test
 
 # Run linting
 make lint
 
-# Run security checks
-make security
+# Run security checks (needs gosec)
+make security-check
 
 # Generate test coverage report
 make test-coverage
@@ -90,9 +90,8 @@ feat: add support for normal distribution in event generation
 2. Update documentation if you're changing behavior
 3. Add tests for new functionality
 4. Ensure all tests pass locally
-5. Update the CHANGELOG.md with your changes (if applicable)
-6. Push your changes to your fork
-7. Submit a pull request to the main repository
+5. Push your changes to your fork
+6. Submit a pull request to the main repository
 
 ### Pull Request Guidelines
 
@@ -147,7 +146,7 @@ func TestEventScheduler_AddEvent(t *testing.T) {
 
 ### Integration Tests
 
-- Place integration tests in separate files with `// +build integration` tag
+- Place integration tests in separate files with the `//go:build integration` constraint
 - Test interactions with Kubernetes API
 - Use test clusters or simulators (KWOK, kube-scheduler-simulator)
 
@@ -156,7 +155,6 @@ func TestEventScheduler_AddEvent(t *testing.T) {
 - Update README.md if you change user-facing functionality
 - Add or update godoc comments for exported types and functions
 - Include examples in documentation where helpful
-- Keep CLAUDE.md updated with any architectural changes
 
 ## Reporting Issues
 
